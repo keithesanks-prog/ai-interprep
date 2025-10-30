@@ -3,6 +3,26 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 
 type Status = string;
 
+// Conversation recording types
+type ConversationRole = "user" | "assistant" | "system" | "clarifying" | "meta";
+interface ConversationEvent {
+  id: string;
+  role: ConversationRole;
+  content: string;
+  timestamp: number; // epoch ms
+  metadata?: Record<string, any>;
+}
+
+// Profile types
+interface CompanyProfile {
+  id: string;
+  name: string;
+  aboutCompany: string;
+  jobDescription: string;
+  updatedAt: number;
+}
+const PROFILES_STORAGE_KEY = 'aiInterviewProfiles';
+
 // --- Text Generation (calls /api/generate) ---
 async function generateText(prompt: string): Promise<string> {
   const response = await fetch("/api/generate", {
@@ -26,23 +46,33 @@ async function generateText(prompt: string): Promise<string> {
 
 // --- Extract code blocks from text ---
 function extractCodeBlocks(text: string): { cleanText: string; codeBlocks: string[] } {
+  // This regex finds code blocks AND optionally the preamble like 'The query I created was:' right before them
+  const blockPattern = /(\b(The query I created was:|The command I used was:|Here is the query:|Here is the command:|The command was:|The SPL query was:)[\s:]*\n*)?(```[\s\S]*?```)/gi;
   const codeBlockRegex = /```[\s\S]*?```/g;
   const codeBlocks: string[] = [];
   let cleanText = text;
 
-  const matches = text.match(codeBlockRegex);
-  if (matches) {
-    matches.forEach((block) => {
-      // Remove the triple backticks and language identifier
-      const cleanBlock = block
-        .replace(/^```[a-zA-Z]*\n?/, '')
-        .replace(/\n?```$/, '')
-        .trim();
-      codeBlocks.push(cleanBlock);
-      // Remove the code block from the text
-      cleanText = cleanText.replace(block, '').trim();
-    });
-  }
+  // Track replacements to avoid duplicates
+  let replacedSpans: { start: number; end: number }[] = [];
+
+  // Find blocks with optional preambles
+  cleanText = cleanText.replace(blockPattern, (match, p1, preamble, codeBlock, offset) => {
+    // Always extract the code (removing triple backticks etc)
+    const cleanBlock = codeBlock
+      .replace(/^```[a-zA-Z]*\n?/, "")
+      .replace(/\n?```$/, "")
+      .trim();
+    codeBlocks.push(cleanBlock);
+    // If there was a preamble, insert the placeholder
+    if (preamble) {
+      return `${preamble.trim()} (pause)`;
+    }
+    // If just code block, remove it from text
+    return "";
+  });
+
+  // Remove any leftover code blocks standing alone
+  cleanText = cleanText.replace(codeBlockRegex, "").trim();
 
   // Clean up extra whitespace/newlines
   cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
@@ -56,6 +86,8 @@ interface ScrollingTextDisplayProps {
   readingSpeed?: number; // Base characters per second
 }
 
+const PAUSE_REGEX = /(\(pause\))/gi;
+
 const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
   fullText,
   readingSpeed = 12, // Base: ~12 characters per second (adjustable)
@@ -68,6 +100,26 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
   const isPausedRef = useRef<boolean>(false); // Use ref to check pause state in animation loop
   const [isPaused, setIsPaused] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+
+  // Helper: render text with a highlighted (pause) marker
+  const renderWithPauseMarker = (text: string) => {
+    const parts = text.split(PAUSE_REGEX);
+    return parts.map((part, idx) => {
+      if (part.toLowerCase() === '(pause)') {
+        return (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-2 px-2 py-1 rounded-xl font-bold bg-yellow-400 text-gray-900 mx-2 animate-pulse shadow border-2 border-yellow-600"
+            style={{ fontSize: '1.25em', verticalAlign: 'middle' }}
+          >
+            <span aria-label="Pause" title="Pause here">⏸️ Pause and review the command</span>
+          </span>
+        );
+      } else {
+        return part;
+      }
+    });
+  };
 
   useEffect(() => {
     // Clean up on unmount or when text changes
@@ -219,7 +271,7 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
                 willChange: 'transform',
               }}
             >
-              {fullText}
+              {renderWithPauseMarker(fullText)}
             </div>
           ) : (
             <p className="text-3xl font-bold text-emerald-300">
@@ -231,7 +283,7 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
         {fullText && isAnimating && (
           <button
             onClick={togglePause}
-            className="absolute bottom-4 right-4 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg shadow-lg transition font-semibold z-10"
+            className="absolute bottom-4 right-4 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-2xl shadow-2xl text-2xl font-extrabold transition z-20 border-4 border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-700"
             aria-label={isPaused ? "Resume scrolling" : "Pause scrolling"}
           >
             {isPaused ? "▶ Resume" : "⏸ Pause"}
@@ -257,8 +309,101 @@ const App: React.FC = () => {
   const [scrollingPrompt, setScrollingPrompt] = useState<string>("");
   const [typedQuestion, setTypedQuestion] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+  const [aboutCompany, setAboutCompany] = useState("");
   const [hasMounted, setHasMounted] = useState(false);
   const [readingSpeed, setReadingSpeed] = useState(12); // Characters per second
+
+  // Recording session state
+  const [isSessionRecording, setIsSessionRecording] = useState(false);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+
+  // Profiles state
+  const [profiles, setProfiles] = useState<CompanyProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [profileNameInput, setProfileNameInput] = useState<string>("");
+
+  // Conversation state
+  const [conversation, setConversation] = useState<ConversationEvent[]>([]);
+  const addEvent = useCallback((e: Omit<ConversationEvent, 'id' | 'timestamp'> & { timestamp?: number }) => {
+    const event: ConversationEvent = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: e.timestamp ?? Date.now(),
+      role: e.role,
+      content: e.content,
+      metadata: e.metadata,
+    };
+    setConversation(prev => [...prev, event]);
+  }, []);
+
+  const downloadTranscript = useCallback(() => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      aboutCompany,
+      jobDescription,
+      conversation,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `interview-transcript-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [conversation, aboutCompany, jobDescription]);
+
+  const clearTranscript = useCallback(() => {
+    setConversation([]);
+  }, []);
+
+  // Build plain-text transcript
+  const formatTime = (ts: number) => new Date(ts).toLocaleString();
+  const buildPlainTranscript = useCallback(() => {
+    const lines: string[] = [];
+    lines.push(`# Interview Transcript`);
+    lines.push(`Exported: ${new Date().toLocaleString()}`);
+    if (aboutCompany.trim()) lines.push(`About Company: ${aboutCompany.trim()}`);
+    if (jobDescription.trim()) lines.push(`Job Description: ${jobDescription.trim()}`);
+    lines.push("");
+    for (const evt of conversation) {
+      const role = evt.role.toUpperCase();
+      lines.push(`[${formatTime(evt.timestamp)}] ${role}:`);
+      lines.push(evt.content);
+      lines.push("");
+    }
+    return lines.join("\n");
+  }, [conversation, aboutCompany, jobDescription]);
+
+  const downloadPlainTranscript = useCallback(() => {
+    const text = buildPlainTranscript();
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `interview-transcript-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [buildPlainTranscript]);
+
+  const startRecordingSession = useCallback(() => {
+    setIsSessionRecording(true);
+    setRecordingStartedAt(Date.now());
+    addEvent({ role: 'meta', content: 'Recording session started' });
+    setStatus('Recording session started.');
+  }, [addEvent]);
+
+  const stopRecordingSession = useCallback(() => {
+    setIsSessionRecording(false);
+    addEvent({ role: 'meta', content: 'Recording session stopped' });
+    setStatus('Recording session stopped. Downloading transcript...');
+    // Auto-download plain transcript on stop
+    setTimeout(() => {
+      try { downloadPlainTranscript(); } catch {}
+    }, 100);
+  }, [downloadPlainTranscript, addEvent]);
 
   const SpeechRecognition =
     typeof window !== "undefined"
@@ -268,6 +413,87 @@ const App: React.FC = () => {
   const isSpeechSupported = !!SpeechRecognition;
 
   useEffect(() => setHasMounted(true), []);
+
+  // Load profiles from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as CompanyProfile[];
+        setProfiles(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch {}
+  }, []);
+
+  // Persist profiles on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+    } catch {}
+  }, [profiles]);
+
+  const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const selectProfile = useCallback((id: string) => {
+    setSelectedProfileId(id);
+    const p = profiles.find(pr => pr.id === id);
+    if (p) {
+      setProfileNameInput(p.name);
+      setAboutCompany(p.aboutCompany || "");
+      setJobDescription(p.jobDescription || "");
+      setStatus(`Loaded profile: ${p.name}`);
+    }
+  }, [profiles]);
+
+  const saveCurrentAsProfile = useCallback(() => {
+    const name = profileNameInput.trim();
+    if (!name) {
+      setStatus("Enter a profile name before saving.");
+      return;
+    }
+    if (selectedProfileId) {
+      // Update existing
+      setProfiles(prev => prev.map(p => p.id === selectedProfileId ? {
+        ...p,
+        name,
+        aboutCompany,
+        jobDescription,
+        updatedAt: Date.now(),
+      } : p));
+      setStatus(`Updated profile: ${name}`);
+    } else {
+      // Create new
+      const newProfile: CompanyProfile = {
+        id: generateId(),
+        name,
+        aboutCompany,
+        jobDescription,
+        updatedAt: Date.now(),
+      };
+      setProfiles(prev => [newProfile, ...prev]);
+      setSelectedProfileId(newProfile.id);
+      setStatus(`Saved new profile: ${name}`);
+    }
+  }, [profileNameInput, aboutCompany, jobDescription, selectedProfileId]);
+
+  const newProfile = useCallback(() => {
+    setSelectedProfileId("");
+    setProfileNameInput("");
+    // Do not clear fields automatically so user can start from current content if desired
+    setStatus("New profile: set a name and save.");
+  }, []);
+
+  const deleteProfile = useCallback(() => {
+    if (!selectedProfileId) {
+      setStatus("No profile selected to delete.");
+      return;
+    }
+    const p = profiles.find(pr => pr.id === selectedProfileId);
+    setProfiles(prev => prev.filter(pr => pr.id !== selectedProfileId));
+    setSelectedProfileId("");
+    setProfileNameInput("");
+    setStatus(`Deleted profile${p ? `: ${p.name}` : ''}.`);
+  }, [selectedProfileId, profiles]);
 
   // Prompt mic permission explicitly; helps some browsers prompt reliably
   const requestMicPermission = useCallback(async (): Promise<boolean> => {
@@ -294,26 +520,22 @@ const App: React.FC = () => {
 
     setIsGeneratingClarifying(true);
     setStatus("Generating clarifying questions...");
+    addEvent({ role: 'meta', content: 'Generating clarifying questions', metadata: { originalQuestion } });
 
     try {
-      const clarifyingPrompt = `Based on this interview question, generate 3-4 concise clarifying questions that would help understand what specific direction or angle the interviewer wants the answer to take. The clarifying questions should be short (one sentence each) and focused on different aspects (technical depth, specific examples, industry context, etc.).
-
-Original question: "${originalQuestion}"
-
-Generate clarifying questions as a simple list, one per line, without numbering or bullets.`;
+      const clarifyingPrompt = `Based on this interview question, generate 3-4 concise clarifying questions that would help understand what specific direction or angle the interviewer wants the answer to take. The clarifying questions should be short (one sentence each) and focused on different aspects (technical depth, specific examples, industry context, etc.).\n\nOriginal question: "${originalQuestion}"\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}\n\nGenerate clarifying questions as a simple list, one per line, without numbering or bullets.`;
 
       const clarifyingText = await generateText(clarifyingPrompt);
       
       if (clarifyingText) {
-        // Parse the clarifying questions (split by lines)
         const questions = clarifyingText
           .split('\n')
           .map(q => q.trim())
           .filter(q => q.length > 0 && !q.match(/^(clarity|clarify|question|1\.|2\.|3\.|4\.|-|•)/i))
-          .slice(0, 4); // Take up to 4 questions
+          .slice(0, 4);
         
         setClarifyingQuestions(questions);
-        // Scroll the first clarifying question immediately
+        addEvent({ role: 'assistant', content: questions.join('\n'), metadata: { type: 'clarifying_suggestions' } });
         if (questions.length > 0) {
           setScrollingPrompt(questions[0]);
         }
@@ -329,7 +551,7 @@ Generate clarifying questions as a simple list, one per line, without numbering 
     } finally {
       setIsGeneratingClarifying(false);
     }
-  }, []);
+  }, [aboutCompany, addEvent]);
 
   const handleQuery = useCallback(async (query: string, isClarification: boolean = false) => {
     if (!query || query.trim().length < 5) {
@@ -337,22 +559,29 @@ Generate clarifying questions as a simple list, one per line, without numbering 
       return;
     }
 
-    // Log the full question being sent for debugging
     console.log("📝 Full question being processed:", query);
     console.log("📏 Question length:", query.length, "characters");
+
+    if (!isClarification) {
+      addEvent({ role: 'user', content: query });
+    } else {
+      addEvent({ role: 'clarifying', content: query, metadata: { phase: 'combined_prompt' } });
+    }
 
     setStatus("Generating response...");
     if (!isClarification) {
       setFullResponse("");
-      setClarifyingQuestions([]); // Clear previous clarifying questions only for new questions
+      setClarifyingQuestions([]);
     }
 
     try {
-      // Ensure we're sending the complete question and include role context when available
       const fullQuery = query.trim();
-      const rolePreamble = jobDescription.trim()
-        ? `Role context (job description):\n${jobDescription.trim()}\n\nAnswer the interview question tailored to this role. Keep it spoken-style.\n\nInterview question: ${fullQuery}`
-        : fullQuery;
+      const companyContext = aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : "";
+      const roleContext = jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : "";
+      const rolePreamble =
+        (companyContext || roleContext
+          ? `${companyContext}${roleContext}\nAnswer the interview question tailored to this context. Keep it spoken-style and aim for ~30 seconds (~70–90 words).\n\nInterview question: ${fullQuery}`
+          : `Answer in ~30 seconds (~70–90 words), spoken-style.\n\nInterview question: ${fullQuery}`);
       const generatedText = await generateText(rolePreamble);
 
       if (
@@ -367,13 +596,12 @@ Generate clarifying questions as a simple list, one per line, without numbering 
           "The assistant could not generate a response for that query, possibly due to a safety policy violation. Please try a different question."
         );
         setCodeBlocks([]);
+        addEvent({ role: 'assistant', content: '[No response generated]' });
         return;
       }
 
-      // Extract code blocks from the response
       let { cleanText, codeBlocks: extractedBlocks } = extractCodeBlocks(generatedText);
       
-      // If technical, gently offer deeper dive and offer example query, without adding code
       const isTechnicalQuestion = /(?:technical|technology|system|process|tool|method|how does|how do|implementation|architecture|infrastructure|code|script|query|database|network|security|cloud|API|algorithm|configuration)/i.test(query);
       
       if (isTechnicalQuestion) {
@@ -388,12 +616,15 @@ Generate clarifying questions as a simple list, one per line, without numbering 
       setFullResponse(cleanText);
       setCodeBlocks(extractedBlocks);
       setStatus("Response ready. Scrolling text...");
+
+      addEvent({ role: 'assistant', content: cleanText, metadata: { codeBlocks: extractedBlocks } });
     } catch (error: any) {
       console.error("Query process failed:", error);
       setFullResponse("A network or API error occurred. Check the console.");
       setStatus("Failed: API communication failed. See console.");
+      addEvent({ role: 'assistant', content: '[API error]' });
     }
-  }, [jobDescription]);
+  }, [jobDescription, aboutCompany, addEvent]);
 
   // Go deeper using the existing question and current response
   const generateDeeperAnswer = useCallback(async () => {
@@ -404,16 +635,9 @@ Generate clarifying questions as a simple list, one per line, without numbering 
     try {
       setIsGeneratingDeeper(true);
       setStatus("Generating deeper, more specific answer...");
+      addEvent({ role: 'meta', content: 'Generating deeper answer' });
 
-      const deeperPrompt = `The interviewer asked the following question and the candidate answered. Please produce a deeper, more specific answer that builds directly on the existing answer. Add technical specifics, trade-offs, concrete examples, concise metrics, and relevant tools or methods where appropriate. Keep it conversational, spoken-style, and within 1-2 minutes.
-
-Original question: "${question}"
-
-Existing answer: "${fullResponse}"
-
-${jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : ""}
-
-Now provide a refined, deeper answer that assumes the listener heard the existing answer and expands on the most important specifics (without repeating filler).`;
+      const deeperPrompt = `The interviewer asked the following question and the candidate answered. Please produce a deeper, more specific answer that builds directly on the existing answer. Add technical specifics, trade-offs, concrete examples, concise metrics, and relevant tools or methods where appropriate. Keep it conversational, spoken-style, and target ~30 seconds (~70–90 words).\n\nOriginal question: "${question}"\n\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : ""}\n\nExisting answer: "${fullResponse}"\n\nNow provide a refined, deeper answer that assumes the listener heard the existing answer and expands on the most important specifics (without repeating filler).`;
 
       const generatedText = await generateText(deeperPrompt);
       if (!generatedText || generatedText.trim().length === 0) {
@@ -422,7 +646,6 @@ Now provide a refined, deeper answer that assumes the listener heard the existin
       }
       let { cleanText, codeBlocks: extractedBlocks } = extractCodeBlocks(generatedText);
 
-      // Preserve the "go deeper" closing if the deeper answer is also technical
       const isTechnical = /(?:technical|technology|system|process|tool|method|how does|how do|implementation|architecture|infrastructure|code|script|query|database|network|security|cloud|API|algorithm|configuration)/i.test(question + " " + cleanText);
       if (isTechnical && !cleanText.toLowerCase().includes("would you like me to go deeper")) {
         cleanText = cleanText.trim() + " Would you like me to go deeper into that?";
@@ -431,31 +654,31 @@ Now provide a refined, deeper answer that assumes the listener heard the existin
       setFullResponse(cleanText);
       setCodeBlocks(extractedBlocks);
       setStatus("Deeper response ready. Scrolling text...");
+      addEvent({ role: 'assistant', content: cleanText, metadata: { codeBlocks: extractedBlocks, type: 'deeper' } });
     } catch (e) {
       console.error("Deeper generation failed:", e);
       setStatus("Failed to generate deeper answer.");
+      addEvent({ role: 'assistant', content: '[Deeper generation failed]' });
     } finally {
       setIsGeneratingDeeper(false);
     }
-  }, [question, fullResponse, jobDescription]);
+  }, [question, fullResponse, jobDescription, aboutCompany, addEvent]);
 
   const useClarifyingQuestion = useCallback(async (clarifyingQ: string, originalQ: string) => {
-    // Store the clarifying question and current answer, then start listening
     setPendingClarification({
       question: clarifyingQ,
       originalAnswer: fullResponse
     });
     setStatus(`Clarifying question: "${clarifyingQ}" - Please answer this question...`);
-    // Scroll the selected clarifying question in the output box
     setScrollingPrompt(clarifyingQ);
+    addEvent({ role: 'system', content: `Clarifying question selected: ${clarifyingQ}`, metadata: { originalQ } });
     
-    // Automatically start listening for the user's clarification response
     if (isSpeechSupported) {
       setTimeout(() => {
         startListeningForClarification(clarifyingQ, originalQ, fullResponse);
       }, 500);
     }
-  }, [fullResponse, isSpeechSupported]);
+  }, [fullResponse, isSpeechSupported, addEvent]);
 
   const startListeningForClarification = useCallback(async (
     clarifyingQuestion: string, 
@@ -508,28 +731,12 @@ Now provide a refined, deeper answer that assumes the listener heard the existin
         const clarificationAnswer = finalTranscript.trim();
         setStatus("Integrating clarification...");
         try { recognition.stop(); } catch {}
+        addEvent({ role: 'user', content: clarificationAnswer, metadata: { type: 'clarification_answer', clarifyingQuestion } });
         
-        // Combine original answer with clarification
-        const combinedPrompt = `Based on this original interview answer, the interviewer asked a clarifying question, and the candidate provided additional information. Please provide a refined, comprehensive answer that incorporates both the original response and the new clarification.
+        const combinedPrompt = `Based on this original interview answer, the interviewer asked a clarifying question, and the candidate provided additional information. Please provide a refined, comprehensive answer that incorporates both the original response and the new clarification.\n\nOriginal question: "${originalQuestion}"\n\nOriginal answer: "${originalAnswer}"\n\nClarifying question asked: "${clarifyingQuestion}"\n\nClarification provided: "${clarificationAnswer}"\n\nPlease provide a refined answer that:\n1. Maintains the key points from the original answer\n2. Integrates the new information from the clarification\n3. Provides a more complete and targeted response\n 4. Stays conversational and natural\n${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.trim()}\n` : ""}${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}`;
 
-Original question: "${originalQuestion}"
-
-Original answer: "${originalAnswer}"
-
-Clarifying question asked: "${clarifyingQuestion}"
-
-Clarification provided: "${clarificationAnswer}"
-
-Please provide a refined answer that:
-1. Maintains the key points from the original answer
-2. Integrates the new information from the clarification
-3. Provides a more complete and targeted response
- 4. Stays conversational and natural
-${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.trim()}\n` : ""}`;
-
-        // Clear the scrolling prompt so the refined answer will scroll next
         setScrollingPrompt("");
-        handleQuery(combinedPrompt, true); // Mark as clarification
+        handleQuery(combinedPrompt, true);
         setPendingClarification(null);
       }
     };
@@ -538,6 +745,7 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
       const err = event?.error || "unknown";
       setStatus("Speech Error: " + err);
       setPendingClarification(null);
+      addEvent({ role: 'meta', content: `Clarification error: ${err}` });
     };
     
     recognition.onend = () => {
@@ -554,7 +762,7 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
         setPendingClarification(null);
       }
     }, 150);
-  }, [isSpeechSupported, requestMicPermission, handleQuery]);
+  }, [isSpeechSupported, requestMicPermission, handleQuery, jobDescription, aboutCompany, status, addEvent]);
 
   const startListening = useCallback(async () => {
     if (!isSpeechSupported) {
@@ -562,21 +770,20 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
       return;
     }
 
-    // Ensure mic permission first (improves reliability)
     const ok = await requestMicPermission();
     if (!ok) return;
 
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
-    recognition.interimResults = true; // Get interim results to show what's being heard
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.continuous = true; // CONTINUOUS - keeps listening until explicitly stopped
+    recognition.continuous = true;
 
     setQuestion("");
     setFullResponse("");
     setCodeBlocks([]);
 
-    let allFinalTranscripts: string[] = []; // Store all final segments
+    let allFinalTranscripts: string[] = [];
     let interimTranscript = "";
     let isProcessing = false;
     let speechEndTimeout: NodeJS.Timeout | null = null;
@@ -594,12 +801,13 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
       
       const completeQuestion = [...allFinalTranscripts, interimTranscript].filter(t => t.trim()).join(" ").trim();
       
-      if (completeQuestion.length > 10) { // Ensure we have a minimum length
+      if (completeQuestion.length > 10) {
         isProcessing = true;
         clearSpeechTimeout();
         setQuestion(completeQuestion);
         setStatus("Complete question: " + completeQuestion.substring(0, 60) + (completeQuestion.length > 60 ? "..." : ""));
         try { recognition.stop(); } catch {}
+        addEvent({ role: 'user', content: completeQuestion, metadata: { source: 'microphone' } });
         handleQuery(completeQuestion);
       }
     };
@@ -717,7 +925,7 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
       console.error("recognition.start failed", e);
       setStatus("Error: Could not start microphone.");
     }
-  }, [isSpeechSupported, status, handleQuery]);
+  }, [isSpeechSupported, status, handleQuery, requestMicPermission, addEvent]);
 
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4 sm:p-8 flex items-start justify-center font-sans">
@@ -767,6 +975,55 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
                 : "Ask Question"}
             </span>
           </button>
+
+          {/* Profiles management */}
+          <div className="mt-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Company Profiles</p>
+            <select
+              value={selectedProfileId}
+              onChange={(e) => selectProfile(e.target.value)}
+              className="w-full bg-gray-800 text-white p-2 rounded-md border border-gray-600 focus:border-emerald-500"
+            >
+              <option value="">— Select a profile —</option>
+              {profiles
+                .sort((a, b) => b.updatedAt - a.updatedAt)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+            <input
+              type="text"
+              value={profileNameInput}
+              onChange={(e) => setProfileNameInput(e.target.value)}
+              placeholder="Profile name (e.g., Acme - SecOps)"
+              className="mt-2 w-full bg-gray-800 text-white p-2 rounded-md border border-gray-600 focus:border-emerald-500"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={saveCurrentAsProfile}
+                className="px-3 py-2 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow"
+              >
+                Save Profile
+              </button>
+              <button
+                onClick={newProfile}
+                className="px-3 py-2 rounded-md text-xs font-semibold bg-gray-600 hover:bg-gray-500 text-white shadow"
+              >
+                New
+              </button>
+              <button
+                onClick={deleteProfile}
+                className="px-3 py-2 rounded-md text-xs font-semibold bg-red-600 hover:bg-red-500 text-white shadow disabled:opacity-50"
+                disabled={!selectedProfileId}
+              >
+                Delete
+              </button>
+            </div>
+            <p className="mt-1 text-[10px] text-gray-400">Select a profile to auto-fill the Company and Job fields. Save to create/update.</p>
+          </div>
+
           {/* Clarifying button under Ask Question */}
           <div className="mt-4">
             <button
@@ -841,6 +1098,19 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
                 Submit Question
               </button>
             </div>
+          </div>
+
+          {/* About Company input */}
+          <div className="mt-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">About the Company (optional)</p>
+            <textarea
+              value={aboutCompany}
+              onChange={(e) => setAboutCompany(e.target.value)}
+              rows={4}
+              placeholder="Paste company background here to tailor context..."
+              className="w-full resize-none rounded-md bg-gray-800 text-white p-2 outline-none border border-gray-600 focus:border-emerald-500"
+            />
+            <p className="mt-1 text-[10px] text-gray-400">This will be included as company context for all answers.</p>
           </div>
 
           {/* Job description input */}
@@ -966,6 +1236,43 @@ ${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.t
                   </p>
                 </div>
               )}
+
+              {/* Transcript actions */}
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={downloadTranscript}
+                  className="px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow"
+                >
+                  Download JSON Transcript
+                </button>
+                <button
+                  onClick={downloadPlainTranscript}
+                  className="px-4 py-2 rounded-md text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
+                >
+                  Download Text Transcript
+                </button>
+                <button
+                  onClick={clearTranscript}
+                  className="px-4 py-2 rounded-md text-sm font-semibold bg-gray-600 hover:bg-gray-500 text-white shadow"
+                >
+                  Clear Transcript
+                </button>
+                {!isSessionRecording ? (
+                  <button
+                    onClick={startRecordingSession}
+                    className="px-4 py-2 rounded-md text-sm font-semibold bg-red-600 hover:bg-red-500 text-white shadow"
+                  >
+                    ● Start Recording Session
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopRecordingSession}
+                    className="px-4 py-2 rounded-md text-sm font-semibold bg-red-700 hover:bg-red-600 text-white shadow"
+                  >
+                    ■ Stop & Download Transcript
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
