@@ -19,6 +19,7 @@ interface CompanyProfile {
   name: string;
   aboutCompany: string;
   jobDescription: string;
+  technicalInfo: string;
   updatedAt: number;
 }
 const PROFILES_STORAGE_KEY = 'aiInterviewProfiles';
@@ -46,32 +47,57 @@ async function generateText(prompt: string): Promise<string> {
 
 // --- Extract code blocks from text ---
 function extractCodeBlocks(text: string): { cleanText: string; codeBlocks: string[] } {
-  // This regex finds code blocks AND optionally the preamble like 'The query I created was:' right before them
-  const blockPattern = /(\b(The query I created was:|The command I used was:|Here is the query:|Here is the command:|The command was:|The SPL query was:)[\s:]*\n*)?(```[\s\S]*?```)/gi;
+  // Patterns for phrases that introduce commands/queries
+  const introPhrases = [
+    'For a command to do that, I would use',
+    'Here\'s a query that would work',
+    'The command I\'d use is',
+    'The query I would use',
+    'The command I would use',
+    'The query I created was',
+    'The command I used was',
+    'Here is the query',
+    'Here is the command',
+    'The command was',
+    'The SPL query was'
+  ];
+  
+  // Pattern to match code blocks with optional preamble before them
+  // Captures up to 200 chars before a code block that might contain intro phrases or (pause)
+  const blockPattern = /([\s\S]{0,200}?)(```[\s\S]*?```)/gi;
   const codeBlockRegex = /```[\s\S]*?```/g;
   const codeBlocks: string[] = [];
   let cleanText = text;
 
-  // Track replacements to avoid duplicates
-  let replacedSpans: { start: number; end: number }[] = [];
-
   // Find blocks with optional preambles
-  cleanText = cleanText.replace(blockPattern, (match, p1, preamble, codeBlock, offset) => {
-    // Always extract the code (removing triple backticks etc)
+  cleanText = cleanText.replace(blockPattern, (match, preamble, codeBlock) => {
+    // Extract the code (removing triple backticks etc)
     const cleanBlock = codeBlock
       .replace(/^```[a-zA-Z]*\n?/, "")
       .replace(/\n?```$/, "")
       .trim();
     codeBlocks.push(cleanBlock);
-    // If there was a preamble, insert the placeholder
-    if (preamble) {
-      return `${preamble.trim()} (pause)`;
+    
+    // Check if preamble contains intro phrase or (pause)
+    const hasIntro = preamble && introPhrases.some(phrase => 
+      preamble.toLowerCase().includes(phrase.toLowerCase())
+    );
+    const hasPause = preamble && /\(pause\)/i.test(preamble);
+    
+    // If there was a preamble, preserve it with (pause) if not already present
+    if (preamble && (hasIntro || preamble.trim().length > 0)) {
+      const trimmedPreamble = preamble.trim();
+      if (hasPause) {
+        return trimmedPreamble;
+      } else {
+        return `${trimmedPreamble} (pause)`;
+      }
     }
-    // If just code block, remove it from text
-    return "";
+    // If no preamble but code block exists, add (pause) marker
+    return "(pause)";
   });
 
-  // Remove any leftover code blocks standing alone
+  // Remove any leftover code blocks standing alone (without preambles)
   cleanText = cleanText.replace(codeBlockRegex, "").trim();
 
   // Clean up extra whitespace/newlines
@@ -148,10 +174,65 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
     const endPosition = -textWidth;
     const totalDistance = textWidth + containerWidth;
 
-    // Calculate total duration based on reading speed
+    // Calculate context-aware speed curve based on punctuation and natural pauses
     const pixelsPerCharacter = 18;
     const totalCharacters = fullText.length;
     const basePixelsPerSecond = readingSpeed * pixelsPerCharacter;
+    
+    // Build a speed map: analyze text to find natural pause points
+    const speedMap: number[] = [];
+    const pausePoints: number[] = [];
+    
+    // Identify punctuation and natural breaks
+    for (let i = 0; i < fullText.length; i++) {
+      const char = fullText[i];
+      const charPos = i / fullText.length; // Position as 0-1
+      
+      // Long pauses at sentence endings
+      if (/[.!?]/.test(char)) {
+        pausePoints.push(charPos);
+        speedMap.push(0.3); // Very slow at sentence end
+      }
+      // Medium pauses at commas, semicolons
+      else if (/[,;]/.test(char)) {
+        pausePoints.push(charPos);
+        speedMap.push(0.6); // Medium slow at clause breaks
+      }
+      // Short pauses at colons
+      else if (/[:]/.test(char)) {
+        pausePoints.push(charPos);
+        speedMap.push(0.75); // Slight slow at colons
+      }
+      // Normal speed for regular text
+      else {
+        speedMap.push(1.0);
+      }
+    }
+    
+    // Smooth speed transitions around punctuation
+    const smoothedSpeedMap = speedMap.map((speed, i) => {
+      if (speed < 1.0) {
+        // At punctuation, slow down
+        return speed;
+      } else {
+        // Near punctuation, slightly slow down (smooth transition)
+        const nearbyPause = pausePoints.find(p => {
+          const pos = i / fullText.length;
+          return Math.abs(p - pos) < 0.05; // Within 5% of text
+        });
+        if (nearbyPause) {
+          const pos = i / fullText.length;
+          const distance = Math.abs(nearbyPause - pos);
+          return 0.85 + (distance / 0.05) * 0.15; // Smooth transition
+        }
+        return 1.0;
+      }
+    });
+    
+    // Calculate total duration accounting for variable speeds
+    const avgSpeedMultiplier = smoothedSpeedMap.reduce((a, b) => a + b, 0) / smoothedSpeedMap.length;
+    const adjustedPixelsPerSecond = basePixelsPerSecond * avgSpeedMultiplier;
+    const baseDuration = totalDistance / adjustedPixelsPerSecond;
     
     // Adjust for content complexity
     let speedMultiplier = 1.0;
@@ -160,15 +241,55 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
     if (hasLongWords) speedMultiplier *= 0.9;
     if (punctuationCount > totalCharacters * 0.05) speedMultiplier *= 0.95;
     
-    const adjustedPixelsPerSecond = basePixelsPerSecond * speedMultiplier;
-    const totalDuration = totalDistance / adjustedPixelsPerSecond;
+    const totalDuration = baseDuration / speedMultiplier;
+
+    // Pre-calculate position map for efficient lookup
+    // This maps normalized time progress (0-1) to actual text position (0-1) accounting for variable speeds
+    const positionMap: number[] = [];
+    const mapResolution = 200; // Number of points in the map
+    
+    // Calculate total "weighted time" - time it takes to scroll through text with variable speeds
+    let totalWeightedTime = 0;
+    for (let i = 0; i < smoothedSpeedMap.length - 1; i++) {
+      const segmentLength = 1 / smoothedSpeedMap.length;
+      const speed = smoothedSpeedMap[i];
+      totalWeightedTime += segmentLength / speed;
+    }
+    
+    // Build position map: for each time point, find corresponding text position
+    for (let i = 0; i <= mapResolution; i++) {
+      const timeProgress = i / mapResolution;
+      let textProgress = 0;
+      let accumulatedTime = 0;
+      
+      // Traverse through text segments
+      for (let j = 0; j < smoothedSpeedMap.length; j++) {
+        const segmentStart = j / smoothedSpeedMap.length;
+        const segmentEnd = (j + 1) / smoothedSpeedMap.length;
+        const speed = smoothedSpeedMap[j];
+        const segmentTime = (segmentEnd - segmentStart) / speed;
+        const normalizedSegmentTime = segmentTime / totalWeightedTime;
+        
+        if (accumulatedTime + normalizedSegmentTime >= timeProgress) {
+          // We're in this segment
+          const progressInSegment = (timeProgress - accumulatedTime) / normalizedSegmentTime;
+          textProgress = segmentStart + (segmentEnd - segmentStart) * progressInSegment;
+          break;
+        }
+        
+        accumulatedTime += normalizedSegmentTime;
+        textProgress = segmentEnd;
+      }
+      
+      positionMap.push(Math.min(textProgress, 1));
+    }
 
     // Reset position to start
     if (textRef.current) {
       textRef.current.style.transform = `translateX(${startPosition}px)`;
     }
 
-    // Start animation
+    // Context-aware animation with variable speed
     const animate = (timestamp: number) => {
       if (!textRef.current) return;
 
@@ -189,9 +310,18 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
         return;
       }
       
-      // Calculate current position (linear interpolation)
-      const progress = Math.min(elapsed / totalDuration, 1);
-      const currentX = startPosition + (endPosition - startPosition) * progress;
+      // Calculate normalized progress (0-1)
+      const normalizedProgress = Math.min(elapsed / totalDuration, 1);
+      
+      // Look up actual text position from pre-calculated map
+      const mapIndex = Math.floor(normalizedProgress * mapResolution);
+      const mapIndexNext = Math.min(mapIndex + 1, mapResolution);
+      const mapProgress = (normalizedProgress * mapResolution) - mapIndex;
+      
+      const textProgress = positionMap[mapIndex] + 
+        (positionMap[mapIndexNext] - positionMap[mapIndex]) * mapProgress;
+      
+      const currentX = startPosition + (endPosition - startPosition) * textProgress;
       
       textRef.current.style.transform = `translateX(${currentX}px)`;
       animationRef.current = requestAnimationFrame(animate);
@@ -310,6 +440,7 @@ const App: React.FC = () => {
   const [typedQuestion, setTypedQuestion] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [aboutCompany, setAboutCompany] = useState("");
+  const [technicalInfo, setTechnicalInfo] = useState("");
   const [hasMounted, setHasMounted] = useState(false);
   const [readingSpeed, setReadingSpeed] = useState(12); // Characters per second
 
@@ -340,6 +471,7 @@ const App: React.FC = () => {
       exportedAt: new Date().toISOString(),
       aboutCompany,
       jobDescription,
+      technicalInfo,
       conversation,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -351,7 +483,7 @@ const App: React.FC = () => {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  }, [conversation, aboutCompany, jobDescription]);
+  }, [conversation, aboutCompany, jobDescription, technicalInfo]);
 
   const clearTranscript = useCallback(() => {
     setConversation([]);
@@ -365,6 +497,7 @@ const App: React.FC = () => {
     lines.push(`Exported: ${new Date().toLocaleString()}`);
     if (aboutCompany.trim()) lines.push(`About Company: ${aboutCompany.trim()}`);
     if (jobDescription.trim()) lines.push(`Job Description: ${jobDescription.trim()}`);
+    if (technicalInfo.trim()) lines.push(`Technical Information: ${technicalInfo.trim()}`);
     lines.push("");
     for (const evt of conversation) {
       const role = evt.role.toUpperCase();
@@ -373,7 +506,7 @@ const App: React.FC = () => {
       lines.push("");
     }
     return lines.join("\n");
-  }, [conversation, aboutCompany, jobDescription]);
+  }, [conversation, aboutCompany, jobDescription, technicalInfo]);
 
   const downloadPlainTranscript = useCallback(() => {
     const text = buildPlainTranscript();
@@ -420,7 +553,12 @@ const App: React.FC = () => {
       const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CompanyProfile[];
-        setProfiles(Array.isArray(parsed) ? parsed : []);
+        // Migrate old profiles that don't have technicalInfo field
+        const migrated = parsed.map((p: any) => ({
+          ...p,
+          technicalInfo: p.technicalInfo || "",
+        }));
+        setProfiles(Array.isArray(migrated) ? migrated : []);
       }
     } catch {}
   }, []);
@@ -441,6 +579,7 @@ const App: React.FC = () => {
       setProfileNameInput(p.name);
       setAboutCompany(p.aboutCompany || "");
       setJobDescription(p.jobDescription || "");
+      setTechnicalInfo(p.technicalInfo || "");
       setStatus(`Loaded profile: ${p.name}`);
     }
   }, [profiles]);
@@ -458,6 +597,7 @@ const App: React.FC = () => {
         name,
         aboutCompany,
         jobDescription,
+        technicalInfo,
         updatedAt: Date.now(),
       } : p));
       setStatus(`Updated profile: ${name}`);
@@ -468,13 +608,14 @@ const App: React.FC = () => {
         name,
         aboutCompany,
         jobDescription,
+        technicalInfo,
         updatedAt: Date.now(),
       };
       setProfiles(prev => [newProfile, ...prev]);
       setSelectedProfileId(newProfile.id);
       setStatus(`Saved new profile: ${name}`);
     }
-  }, [profileNameInput, aboutCompany, jobDescription, selectedProfileId]);
+  }, [profileNameInput, aboutCompany, jobDescription, technicalInfo, selectedProfileId]);
 
   const newProfile = useCallback(() => {
     setSelectedProfileId("");
@@ -523,7 +664,7 @@ const App: React.FC = () => {
     addEvent({ role: 'meta', content: 'Generating clarifying questions', metadata: { originalQuestion } });
 
     try {
-      const clarifyingPrompt = `Based on this interview question, generate 3-4 concise clarifying questions that would help understand what specific direction or angle the interviewer wants the answer to take. The clarifying questions should be short (one sentence each) and focused on different aspects (technical depth, specific examples, industry context, etc.).\n\nOriginal question: "${originalQuestion}"\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}\n\nGenerate clarifying questions as a simple list, one per line, without numbering or bullets.`;
+      const clarifyingPrompt = `Based on this interview question, generate 3-4 concise clarifying questions that would help understand what specific direction or angle the interviewer wants the answer to take. The clarifying questions should be short (one sentence each) and focused on different aspects (technical depth, specific examples, industry context, etc.).\n\nOriginal question: "${originalQuestion}"\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : ""}\n\nGenerate clarifying questions as a simple list, one per line, without numbering or bullets.`;
 
       const clarifyingText = await generateText(clarifyingPrompt);
       
@@ -551,7 +692,7 @@ const App: React.FC = () => {
     } finally {
       setIsGeneratingClarifying(false);
     }
-  }, [aboutCompany, addEvent]);
+  }, [aboutCompany, technicalInfo, addEvent]);
 
   const handleQuery = useCallback(async (query: string, isClarification: boolean = false) => {
     if (!query || query.trim().length < 5) {
@@ -564,9 +705,10 @@ const App: React.FC = () => {
 
     if (!isClarification) {
       addEvent({ role: 'user', content: query });
-    } else {
-      addEvent({ role: 'clarifying', content: query, metadata: { phase: 'combined_prompt' } });
     }
+    // Note: For clarifications, we don't log the combined prompt here because
+    // the actual user clarification answer is already logged separately
+    // in startListeningForClarification (line 747)
 
     setStatus("Generating response...");
     if (!isClarification) {
@@ -578,9 +720,10 @@ const App: React.FC = () => {
       const fullQuery = query.trim();
       const companyContext = aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : "";
       const roleContext = jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : "";
+      const techContext = technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : "";
       const rolePreamble =
-        (companyContext || roleContext
-          ? `${companyContext}${roleContext}\nAnswer the interview question tailored to this context. Keep it spoken-style and aim for ~30 seconds (~70–90 words).\n\nInterview question: ${fullQuery}`
+        (companyContext || roleContext || techContext
+          ? `${companyContext}${roleContext}${techContext}\nAnswer the interview question tailored to this context. Keep it spoken-style and aim for ~30 seconds (~70–90 words).\n\nInterview question: ${fullQuery}`
           : `Answer in ~30 seconds (~70–90 words), spoken-style.\n\nInterview question: ${fullQuery}`);
       const generatedText = await generateText(rolePreamble);
 
@@ -624,7 +767,7 @@ const App: React.FC = () => {
       setStatus("Failed: API communication failed. See console.");
       addEvent({ role: 'assistant', content: '[API error]' });
     }
-  }, [jobDescription, aboutCompany, addEvent]);
+  }, [jobDescription, aboutCompany, technicalInfo, addEvent]);
 
   // Go deeper using the existing question and current response
   const generateDeeperAnswer = useCallback(async () => {
@@ -637,7 +780,7 @@ const App: React.FC = () => {
       setStatus("Generating deeper, more specific answer...");
       addEvent({ role: 'meta', content: 'Generating deeper answer' });
 
-      const deeperPrompt = `The interviewer asked the following question and the candidate answered. Please produce a deeper, more specific answer that builds directly on the existing answer. Add technical specifics, trade-offs, concrete examples, concise metrics, and relevant tools or methods where appropriate. Keep it conversational, spoken-style, and target ~30 seconds (~70–90 words).\n\nOriginal question: "${question}"\n\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : ""}\n\nExisting answer: "${fullResponse}"\n\nNow provide a refined, deeper answer that assumes the listener heard the existing answer and expands on the most important specifics (without repeating filler).`;
+      const deeperPrompt = `The interviewer asked the following question and the candidate answered. Please produce a deeper, more specific answer that builds directly on the existing answer. Add technical specifics, trade-offs, concrete examples, concise metrics, and relevant tools or methods where appropriate. Keep it conversational, spoken-style, and target ~30 seconds (~70–90 words).\n\nOriginal question: "${question}"\n\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : ""}${technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : ""}\n\nExisting answer: "${fullResponse}"\n\nNow provide a refined, deeper answer that assumes the listener heard the existing answer and expands on the most important specifics (without repeating filler).`;
 
       const generatedText = await generateText(deeperPrompt);
       if (!generatedText || generatedText.trim().length === 0) {
@@ -662,7 +805,7 @@ const App: React.FC = () => {
     } finally {
       setIsGeneratingDeeper(false);
     }
-  }, [question, fullResponse, jobDescription, aboutCompany, addEvent]);
+  }, [question, fullResponse, jobDescription, aboutCompany, technicalInfo, addEvent]);
 
   const useClarifyingQuestion = useCallback(async (clarifyingQ: string, originalQ: string) => {
     setPendingClarification({
@@ -733,7 +876,7 @@ const App: React.FC = () => {
         try { recognition.stop(); } catch {}
         addEvent({ role: 'user', content: clarificationAnswer, metadata: { type: 'clarification_answer', clarifyingQuestion } });
         
-        const combinedPrompt = `Based on this original interview answer, the interviewer asked a clarifying question, and the candidate provided additional information. Please provide a refined, comprehensive answer that incorporates both the original response and the new clarification.\n\nOriginal question: "${originalQuestion}"\n\nOriginal answer: "${originalAnswer}"\n\nClarifying question asked: "${clarifyingQuestion}"\n\nClarification provided: "${clarificationAnswer}"\n\nPlease provide a refined answer that:\n1. Maintains the key points from the original answer\n2. Integrates the new information from the clarification\n3. Provides a more complete and targeted response\n 4. Stays conversational and natural\n${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.trim()}\n` : ""}${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}`;
+        const combinedPrompt = `Based on this original interview answer, the interviewer asked a clarifying question, and the candidate provided additional information. Please provide a refined, comprehensive answer that incorporates both the original response and the new clarification.\n\nOriginal question: "${originalQuestion}"\n\nOriginal answer: "${originalAnswer}"\n\nClarifying question asked: "${clarifyingQuestion}"\n\nClarification provided: "${clarificationAnswer}"\n\nPlease provide a refined answer that:\n1. Maintains the key points from the original answer\n2. Integrates the new information from the clarification\n3. Provides a more complete and targeted response\n 4. Stays conversational and natural\n${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.trim()}\n` : ""}${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : ""}`;
 
         setScrollingPrompt("");
         handleQuery(combinedPrompt, true);
@@ -762,7 +905,7 @@ const App: React.FC = () => {
         setPendingClarification(null);
       }
     }, 150);
-  }, [isSpeechSupported, requestMicPermission, handleQuery, jobDescription, aboutCompany, status, addEvent]);
+  }, [isSpeechSupported, requestMicPermission, handleQuery, jobDescription, aboutCompany, technicalInfo, status, addEvent]);
 
   const startListening = useCallback(async () => {
     if (!isSpeechSupported) {
@@ -1124,6 +1267,19 @@ const App: React.FC = () => {
               className="w-full resize-none rounded-md bg-gray-800 text-white p-2 outline-none border border-gray-600 focus:border-emerald-500"
             />
             <p className="mt-1 text-[10px] text-gray-400">This will be used to tailor all future answers.</p>
+          </div>
+
+          {/* Technical Information input */}
+          <div className="mt-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Technical Information (optional)</p>
+            <textarea
+              value={technicalInfo}
+              onChange={(e) => setTechnicalInfo(e.target.value)}
+              rows={6}
+              placeholder="Add any technical information relevant to the job (tools, technologies, specific requirements)..."
+              className="w-full resize-none rounded-md bg-gray-800 text-white p-2 outline-none border border-gray-600 focus:border-emerald-500"
+            />
+            <p className="mt-1 text-[10px] text-gray-400">This will be included to tailor technical responses.</p>
           </div>
         </div>
 
