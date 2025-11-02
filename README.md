@@ -1,91 +1,346 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Interview Assistant
 
-## AI Interview Assistant with RAG
+A sophisticated AI-powered interview preparation application that uses Retrieval-Augmented Generation (RAG) to provide context-aware, personalized interview responses. Built with Next.js, React, TypeScript, and Google's Gemini AI.
 
-This application uses Retrieval-Augmented Generation (RAG) to provide context-aware interview responses based on a library of 33 professional experiences.
+## 🎯 Overview
 
-## Setup
+This application helps candidates prepare for technical interviews by:
+- Retrieving relevant experiences from a knowledge base using semantic search
+- Providing personalized responses tailored to specific job profiles
+- Supporting both traditional Q&A interviews and procedural/practical interviews
+- Maintaining consistency across multiple interview rounds
+- Tracking response times and optimizing answer delivery
 
-### 1. Install Dependencies
+## ✨ Key Features
 
-**Node.js dependencies:**
-```bash
-npm install
+### 🧠 Retrieval-Augmented Generation (RAG)
+- **Semantic Search**: Uses Gemini's embedding model (`models/embedding-001`) to find the most relevant experiences and technical Q&A pairs
+- **Dynamic Context**: Retrieves top 5 relevant experiences and top 3 technical Q&A pairs per question
+- **Efficient Storage**: Uses ChromaDB for vector storage and similarity search
+- **Scalable**: Easily add new experiences and Q&A without modifying code
+
+### 📋 Dual Interview Modes
+
+#### 1. Question & Answer Interview (Q&A)
+- Traditional interview format with conversational responses
+- Context-aware scrolling text display
+- Code block extraction and highlighting
+- Voice input with speech recognition
+- Text-to-speech audio responses
+
+#### 2. Procedural Interview Steps
+- Step-by-step process explanations
+- Syntax highlighting for commands and code
+- Cloud service-specific instructions (AWS, Azure, GCP)
+- Framework-based responses (SANS Incident Response, SDLC, RMF)
+- First-person, action-oriented descriptions
+
+### 🏢 Profile Management
+- **Multiple Company Profiles**: Create and manage profiles for different companies
+- **Job-Specific Context**: Store job descriptions, company information, and technical requirements per profile
+- **Custom Technical Q&A**: Add profile-specific questions and answers that are automatically retrieved during interviews
+- **Profile-Based Storage**: Responses are stored and retrieved per profile for consistency
+
+### 🎯 Interview Round Selection
+- **Round Tracking**: Select interview rounds 1-7
+- **Separate Storage**: Questions and responses stored separately per round
+- **Round-Specific Consistency**: Maintains consistent answers within the same round
+- **Easy Switching**: Toggle between rounds with a single click
+
+### 💾 Response Storage & Consistency
+- **Automatic Storage**: All generated responses are stored in ChromaDB
+- **Similarity Matching**: Retrieves stored responses for similar questions (85% similarity threshold)
+- **Round & Profile Filtering**: Responses filtered by interview round and profile
+- **Clear Functionality**: Clear stored responses for testing or specific rounds/profiles
+
+### ⏱️ Response Timer
+- **Precise Measurement**: Tracks time from question finalization to response display
+- **Visual Feedback**: Displays elapsed time in real-time
+- **Performance Tracking**: Helps optimize response generation speed
+- **WPM Display**: Shows reading speed in words per minute (WPM)
+
+### 🎨 Enhanced User Experience
+- **Context-Aware Scrolling**: Adjusts scrolling speed based on punctuation and natural pauses
+- **Code Block Highlighting**: Automatically extracts and highlights code snippets
+- **Pause Indicators**: Visual markers for reviewing technical commands
+- **Adjustable Reading Speed**: Customize scrolling speed (5-30 chars/sec with WPM display)
+- **Conversation Transcript**: Full conversation history with timestamps
+- **Deepen & Clarify**: Request deeper answers or clarification on responses
+
+### 🔍 Procedural Knowledge Lookup
+- **Framework Detection**: Automatically detects procedural questions (Incident Response, SDLC, RMF)
+- **Contextualized Responses**: Uses Gemini to personalize framework responses to specific scenarios
+- **First-Person Voice**: Generates action-oriented, first-person responses
+- **Cloud-Specific**: Incorporates cloud platforms and tools mentioned in questions
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **Next.js 16** - React framework with App Router
+- **React 19** - UI library
+- **TypeScript 5** - Type-safe JavaScript
+- **Tailwind CSS 4** - Utility-first CSS framework
+
+### Backend
+- **Next.js API Routes** - Serverless API endpoints
+- **ChromaDB** - Vector database for embeddings
+- **Google Gemini AI** - Text generation (`gemini-2.5-flash-preview-09-2025`)
+- **Gemini TTS** - Text-to-speech (`gemini-2.5-flash-preview-tts`)
+- **Gemini Embeddings** - Semantic search (`models/embedding-001`)
+
+### Data Processing
+- **Python 3** - Data ingestion scripts
+- **LangChain** - Text chunking and splitting
+- **FastAPI** - Optional Python API server (deprecated in favor of direct ChromaDB)
+
+## 📦 Installation
+
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.8+ and pip
+- Google Gemini API key ([Get one here](https://aistudio.google.com/app/apikey))
+
+### Setup Steps
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd ai-eng-app
+   ```
+
+2. **Install Node.js dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up environment variables**
+   
+   Create a `.env.local` file in the root directory:
+   ```bash
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+
+5. **Initialize the vector database**
+   
+   **For experiences:**
+   ```bash
+   python ingest.py
+   ```
+   
+   **For technical Q&A:**
+   ```bash
+   python ingest_technical_qa.py
+   ```
+   
+   These scripts will:
+   - Load data from JSON files (`experiences.json`, `technical_qa.json`)
+   - Generate embeddings using Gemini's embedding model
+   - Store vectors in `./chroma_db/` directory
+
+6. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+
+7. **Open your browser**
+   
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## 📖 Usage Guide
+
+### Creating a Company Profile
+
+1. Click **"Manage Profiles"** or use the profile dropdown
+2. Click **"Create New Profile"**
+3. Fill in:
+   - **Company Name**: The name of the company
+   - **About Company**: Background information about the company
+   - **Job Description**: The specific job you're interviewing for
+   - **Technical Information**: Technical details relevant to the role
+4. Click **"Save Profile"**
+
+### Adding Technical Q&A
+
+1. Open a profile
+2. In the **"Technical Q&A"** section, enter:
+   - **Question**: The interview question
+   - **Answer**: Your prepared answer (can include code snippets)
+3. Click **"Add Q&A"** to add more pairs
+4. Q&A pairs are automatically saved and used during interviews
+
+### Conducting an Interview
+
+#### Q&A Mode
+1. Select your interview mode: **"Question and Answer Interview"**
+2. Select the interview round (1-7)
+3. Select or create a company profile
+4. Ask questions via:
+   - **Voice**: Click the microphone button and speak
+   - **Text**: Type your question and click "Ask Question"
+5. Review the scrolling response
+6. Use **"Go Deeper"** or **"Ask for Clarification"** buttons as needed
+
+#### Procedural Mode
+1. Select your interview mode: **"Procedural Interview Steps"**
+2. Select the interview round (1-7)
+3. Select a company profile
+4. Ask procedural questions (e.g., "Walk me through incident response for an AWS security breach")
+5. Review the step-by-step response with highlighted commands
+
+### Managing Stored Responses
+
+- **View Count**: The stored response count is displayed in the UI
+- **Clear Responses**: Click **"Clear Stored Responses"** to remove stored responses for:
+  - Current profile only
+  - Current interview round only
+  - Both filters combined
+
+### Adjusting Reading Speed
+
+- Use the **Speed slider** to adjust character-per-second scrolling speed
+- WPM (Words Per Minute) is calculated and displayed automatically
+- Recommended speeds:
+  - **Slow**: 5-10 chars/sec (~60-120 WPM)
+  - **Medium**: 11-19 chars/sec (~132-228 WPM)
+  - **Fast**: 20-30 chars/sec (~240-360 WPM)
+
+## 📁 Project Structure
+
+```
+ai-eng-app/
+├── app/
+│   ├── api/
+│   │   ├── generate/
+│   │   │   └── route.ts          # Main API route for text generation
+│   │   ├── tts/
+│   │   │   └── route.ts          # Text-to-speech API route
+│   │   ├── clear-responses/
+│   │   │   └── route.ts          # Clear stored responses API
+│   │   └── rag_utils.ts          # RAG utility functions (retrieval, storage)
+│   ├── page.tsx                  # Main frontend component
+│   ├── layout.tsx                # App layout
+│   └── globals.css               # Global styles
+├── utils/
+│   └── procedural-lookup.ts     # Procedural framework lookup utility
+├── experiences.json              # User experiences database
+├── technical_qa.json             # Technical Q&A database
+├── procedural_data.json          # Procedural frameworks (SANS, SDLC, RMF)
+├── ingest.py                    # Python script to ingest experiences
+├── ingest_technical_qa.py       # Python script to ingest technical Q&A
+├── rag_api.py                   # Optional FastAPI server (deprecated)
+├── chroma_db/                   # ChromaDB vector database (generated)
+├── package.json                 # Node.js dependencies
+├── requirements.txt             # Python dependencies
+├── tsconfig.json                # TypeScript configuration
+├── next.config.ts               # Next.js configuration
+└── README.md                    # This file
 ```
 
-**Python dependencies (for RAG system):**
-```bash
-pip install -r requirements.txt
+## 🔌 API Endpoints
+
+### POST `/api/generate`
+Generates AI responses using RAG and Gemini.
+
+**Request Body:**
+```json
+{
+  "prompt": "Interview question: What is your experience with cloud security?",
+  "technicalQAs": [
+    {
+      "question": "How do you secure AWS resources?",
+      "answer": "I use IAM roles, Security Groups, and CloudTrail..."
+    }
+  ],
+  "interviewMode": "qa",
+  "interviewRound": 1,
+  "profileId": "profile-123"
+}
 ```
 
-### 2. Set Environment Variables
-
-Create a `.env.local` file in the root directory:
-```bash
-GEMINI_API_KEY=your_gemini_api_key_here
-RAG_API_URL=http://localhost:8000  # Optional, defaults to localhost:8000
+**Response:**
+```json
+{
+  "candidates": [{
+    "content": {
+      "parts": [{
+        "text": "Generated response text..."
+      }]
+    }
+  }]
+}
 ```
 
-### 3. Initialize Vector Database
+### POST `/api/tts`
+Converts text to speech using Gemini TTS.
 
-**For experiences:**
+**Request Body:**
+```json
+{
+  "text": "Your response text here"
+}
+```
+
+**Response:**
+```json
+{
+  "audioData": "base64_encoded_audio_data"
+}
+```
+
+### POST `/api/clear-responses`
+Clears stored responses for a specific profile and/or round.
+
+**Request Body:**
+```json
+{
+  "profileId": "profile-123",
+  "interviewRound": 1
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Cleared 5 stored response(s) for profile from round 1",
+  "count": 5
+}
+```
+
+### GET `/api/clear-responses?profileId=...&interviewRound=...`
+Gets the count of stored responses (filtered by profile and/or round).
+
+## 📝 Adding Content
+
+### Adding New Experiences
+
+1. Edit `experiences.json`:
+```json
+{
+  "title": "Project Title",
+  "company": "Company Name",
+  "description": "Detailed STAR-format description of your experience..."
+}
+```
+
+2. Run the ingestion script:
 ```bash
 python ingest.py
 ```
 
-**For technical Q&A:**
-```bash
-python ingest_technical_qa.py
-```
-
-These will:
-- Load experiences/Q&A from JSON files
-- Generate embeddings using Gemini's `models/embedding-001`
-- Store them in `./chroma_db/` directory
-
-### 4. Start Next.js Development Server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-## Project Structure
-
-- `experiences.json` - All 33 experiences in JSON format
-- `technical_qa.json` - Technical Q&A pairs for interview preparation
-- `ingest.py` - Script to create vector database from experiences
-- `ingest_technical_qa.py` - Script to create vector database from technical Q&A
-- `rag_api.py` - Python FastAPI server for RAG retrieval (optional, now using direct ChromaDB)
-- `app/api/generate/route.ts` - Next.js API route that uses RAG to retrieve relevant experiences and Q&A
-- `app/api/rag_utils.ts` - RAG utility functions for retrieval
-- `app/page.tsx` - Frontend React component
-
-## How RAG Works
-
-1. **Question comes in** → Extracted from user prompt
-2. **Query embedding** → Generated using Gemini's embedding model
-3. **Semantic search** → ChromaDB finds top 5 most relevant experiences + top 3 technical Q&A pairs
-4. **Prompt augmentation** → Retrieved experiences and Q&A are included in the system instruction
-5. **Response generation** → Gemini generates answer using retrieved context
-
-This approach is more efficient than hardcoding all experiences in every prompt, reducing token usage and improving relevance. Technical Q&A pairs provide ready-made answers for common technical interview questions.
-
-## Adding New Content
-
-### Adding New Experiences
-
-1. Add new experience to `experiences.json`
-2. Run `python ingest.py` again (it will prompt to recreate the collection)
-3. The new experience will be available for retrieval
+3. The script will prompt to recreate the collection - confirm to update
 
 ### Adding Technical Q&A
 
-1. Add new Q&A pair to `technical_qa.json` with this format:
+1. Edit `technical_qa.json`:
 ```json
 {
-  "id": 9,
+  "id": 10,
   "question": "Your technical question here",
   "answer": "Your detailed answer here. Include code snippets, commands, or queries as needed.",
   "tags": ["Tag1", "Tag2", "Tag3"],
@@ -93,25 +348,128 @@ This approach is more efficient than hardcoding all experiences in every prompt,
 }
 ```
 
-2. Run `python ingest_technical_qa.py` to update the vector database
-3. The Q&A will be automatically retrieved when relevant questions are asked during interviews
+2. Run the ingestion script:
+```bash
+python ingest_technical_qa.py
+```
 
-**Example Q&A Format:**
-- Include specific commands, queries, or code snippets in answers
-- Add relevant tags for better searchability
-- Use descriptive categories (e.g., "SIEM/Logging", "Cloud Security", "Detection")
+### Adding Procedural Frameworks
 
-## Learn More
+1. Edit `procedural_data.json`:
+```json
+{
+  "id": "framework-id",
+  "title": "Framework Name",
+  "summary": "Brief summary of the framework",
+  "phases": [
+    {
+      "phase_number": 1,
+      "phase_name": "Phase Name",
+      "description": "Detailed action-oriented description..."
+    }
+  ]
+}
+```
 
-To learn more about Next.js, take a look at the following resources:
+2. The framework will be automatically available for procedural questions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🔧 Configuration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Environment Variables
 
-## Deploy on Vercel
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GEMINI_API_KEY` | Your Google Gemini API key | Yes |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### ChromaDB Configuration
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+ChromaDB stores vectors in the `./chroma_db/` directory. This directory is automatically created during ingestion and should be added to `.gitignore`.
+
+### Embedding Model
+
+The application uses Gemini's `models/embedding-001` for generating embeddings. This is configured in both Python ingestion scripts and TypeScript retrieval utilities.
+
+## 🚀 Deployment
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+### Start Production Server
+
+```bash
+npm start
+```
+
+### Deploy on Vercel
+
+1. Push your code to GitHub
+2. Import your repository in [Vercel](https://vercel.com)
+3. Add `GEMINI_API_KEY` to environment variables
+4. Deploy
+
+**Note**: For production deployment, ensure:
+- ChromaDB data is persisted (consider using ChromaDB Cloud or a persistent volume)
+- Python ingestion scripts are run during deployment or as a separate process
+- Environment variables are properly configured
+
+## 🧪 How RAG Works
+
+1. **Question Input**: User asks an interview question
+2. **Query Extraction**: System extracts the core question from the prompt
+3. **Embedding Generation**: Query is embedded using Gemini's embedding model
+4. **Semantic Search**: ChromaDB performs similarity search against stored vectors
+5. **Context Retrieval**: Top 5 experiences + top 3 technical Q&A pairs are retrieved
+6. **Stored Response Check**: Checks for similar previously answered questions (85% similarity)
+7. **Prompt Augmentation**: Retrieved context is injected into the system instruction
+8. **Response Generation**: Gemini generates a personalized answer using the context
+9. **Response Storage**: Generated response is stored in ChromaDB for future consistency
+
+## 🎓 Best Practices
+
+### Profile Management
+- Create separate profiles for each company/role
+- Include specific technical requirements in the "Technical Information" field
+- Add relevant Q&A pairs for each profile
+- Use descriptive company names for easy identification
+
+### Interview Rounds
+- Use Round 1 for initial practice
+- Use subsequent rounds for refinement
+- Clear responses between rounds if needed for testing
+- Keep responses consistent within the same round
+
+### Technical Q&A
+- Include specific commands, queries, or code snippets
+- Use descriptive tags and categories
+- Format code blocks properly for syntax highlighting
+- Keep answers concise but comprehensive
+
+### Response Consistency
+- Similar questions will retrieve stored responses automatically
+- Use "Clear Stored Responses" to reset when needed
+- Store responses per profile and round for organization
+
+## 📚 Learn More
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [React Documentation](https://react.dev)
+- [Google Gemini API](https://ai.google.dev/docs)
+- [ChromaDB Documentation](https://docs.trychroma.com)
+- [LangChain Documentation](https://python.langchain.com)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is private and proprietary.
+
+## 🙏 Acknowledgments
+
+- Built with [Next.js](https://nextjs.org) by Vercel
+- Powered by [Google Gemini AI](https://ai.google.dev)
+- Vector storage by [ChromaDB](https://www.trychroma.com)

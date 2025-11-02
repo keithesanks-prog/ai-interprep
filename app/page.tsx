@@ -537,6 +537,13 @@ const App: React.FC = () => {
   // Interview round state
   const [interviewRound, setInterviewRound] = useState<number>(1);
 
+  // Active Interview mode state
+  const [isActiveInterviewMode, setIsActiveInterviewMode] = useState<boolean>(false);
+  const backgroundRecognitionRef = useRef<any>(null);
+  const rollingBufferRef = useRef<Array<{ text: string; timestamp: number }>>([]);
+  const bufferCleanupIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isActiveInterviewModeRef = useRef<boolean>(false);
+
   // Conversation state
   const [conversation, setConversation] = useState<ConversationEvent[]>([]);
   const addEvent = useCallback((e: Omit<ConversationEvent, 'id' | 'timestamp'> & { timestamp?: number }) => {
@@ -1276,6 +1283,140 @@ const App: React.FC = () => {
     }, 150);
   }, [isSpeechSupported, requestMicPermission, handleQuery, jobDescription, aboutCompany, technicalInfo, status, addEvent]);
 
+  // Clean up old entries from rolling buffer (older than 30 seconds)
+  const cleanupRollingBuffer = useCallback(() => {
+    const now = Date.now();
+    const thirtySecondsAgo = now - 30000;
+    rollingBufferRef.current = rollingBufferRef.current.filter(
+      entry => entry.timestamp >= thirtySecondsAgo
+    );
+  }, []);
+
+  // Start background recognition for Active Interview mode
+  const startBackgroundRecognition = useCallback(async () => {
+    if (!isSpeechSupported) {
+      return;
+    }
+
+    const ok = await requestMicPermission();
+    if (!ok) return;
+
+    // Stop any existing background recognition
+    if (backgroundRecognitionRef.current) {
+      try {
+        backgroundRecognitionRef.current.stop();
+      } catch {}
+      backgroundRecognitionRef.current = null;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = true;
+
+    recognition.onresult = (event: any) => {
+      // Process results and add to rolling buffer
+      let latestText = "";
+      for (let i = 0; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          const trimmed = transcript.trim();
+          if (trimmed) {
+            rollingBufferRef.current.push({
+              text: trimmed,
+              timestamp: Date.now()
+            });
+            // Clean up old entries
+            cleanupRollingBuffer();
+          }
+        } else {
+          latestText = transcript;
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      // Silently handle errors in background mode
+      if (event.error === "no-speech") {
+        // Try to restart if it stops
+        setTimeout(() => {
+          if (isActiveInterviewModeRef.current && backgroundRecognitionRef.current) {
+            try {
+              backgroundRecognitionRef.current.start();
+            } catch {}
+          }
+        }, 1000);
+      }
+    };
+
+    recognition.onend = () => {
+      // Auto-restart if Active Interview mode is still enabled
+      if (isActiveInterviewModeRef.current) {
+        setTimeout(() => {
+          if (isActiveInterviewModeRef.current) {
+            try {
+              recognition.start();
+            } catch {}
+          }
+        }, 500);
+      }
+    };
+
+    try {
+      recognition.start();
+      backgroundRecognitionRef.current = recognition;
+    } catch (e) {
+      console.error("Background recognition start failed:", e);
+    }
+  }, [isSpeechSupported, cleanupRollingBuffer]);
+
+  // Stop background recognition
+  const stopBackgroundRecognition = useCallback(() => {
+    if (backgroundRecognitionRef.current) {
+      try {
+        backgroundRecognitionRef.current.stop();
+      } catch {}
+      backgroundRecognitionRef.current = null;
+    }
+    // Clear buffer cleanup interval
+    if (bufferCleanupIntervalRef.current) {
+      clearInterval(bufferCleanupIntervalRef.current);
+      bufferCleanupIntervalRef.current = null;
+    }
+    // Clear the buffer
+    rollingBufferRef.current = [];
+  }, []);
+
+  // Get buffered text from last 30 seconds
+  const getBufferedText = useCallback((): string => {
+    cleanupRollingBuffer();
+    const bufferedTexts = rollingBufferRef.current.map(entry => entry.text);
+    return bufferedTexts.join(" ").trim();
+  }, [cleanupRollingBuffer]);
+
+  // Effect to manage background recognition based on Active Interview mode
+  useEffect(() => {
+    isActiveInterviewModeRef.current = isActiveInterviewMode;
+    
+    if (isActiveInterviewMode) {
+      startBackgroundRecognition();
+      // Set up periodic cleanup of old buffer entries
+      bufferCleanupIntervalRef.current = setInterval(() => {
+        cleanupRollingBuffer();
+      }, 5000); // Clean up every 5 seconds
+    } else {
+      stopBackgroundRecognition();
+    }
+
+    return () => {
+      if (bufferCleanupIntervalRef.current) {
+        clearInterval(bufferCleanupIntervalRef.current);
+        bufferCleanupIntervalRef.current = null;
+      }
+    };
+  }, [isActiveInterviewMode, startBackgroundRecognition, stopBackgroundRecognition, cleanupRollingBuffer]);
+
   const startListening = useCallback(async () => {
     if (!isSpeechSupported) {
       setStatus("Error: Speech Recognition not supported.");
@@ -1284,6 +1425,19 @@ const App: React.FC = () => {
 
     const ok = await requestMicPermission();
     if (!ok) return;
+
+    // Pause background recognition while main listening is active
+    let wasBackgroundActive = false;
+    if (isActiveInterviewMode && backgroundRecognitionRef.current) {
+      wasBackgroundActive = true;
+      try {
+        backgroundRecognitionRef.current.stop();
+      } catch {}
+    }
+
+    // Get buffered text if Active Interview mode is enabled
+    const bufferedText = isActiveInterviewMode ? getBufferedText() : "";
+    const hasBuffer = bufferedText.length > 0;
 
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
@@ -1311,16 +1465,34 @@ const App: React.FC = () => {
     const processCompleteQuestion = () => {
       if (isProcessing) return;
       
-      const completeQuestion = [...allFinalTranscripts, interimTranscript].filter(t => t.trim()).join(" ").trim();
+      // Combine buffered text with new transcription
+      const newText = [...allFinalTranscripts, interimTranscript].filter(t => t.trim()).join(" ").trim();
+      let completeQuestion = newText;
+      
+      if (hasBuffer && newText.length > 0) {
+        // Prepend buffered text if we have both
+        completeQuestion = `${bufferedText} ${newText}`.trim();
+      } else if (hasBuffer && newText.length === 0) {
+        // Only buffered text available
+        completeQuestion = bufferedText;
+      }
       
       if (completeQuestion.length > 10) {
         isProcessing = true;
         clearSpeechTimeout();
         setIsListening(false);
         setQuestion(completeQuestion);
-        setStatus("Complete question: " + completeQuestion.substring(0, 60) + (completeQuestion.length > 60 ? "..." : ""));
+        const statusMsg = hasBuffer 
+          ? `Question (with ${bufferedText.length > 0 ? '30s buffer + ' : ''}new): ${completeQuestion.substring(0, 60)}${completeQuestion.length > 60 ? "..." : ""}`
+          : `Complete question: ${completeQuestion.substring(0, 60)}${completeQuestion.length > 60 ? "..." : ""}`;
+        setStatus(statusMsg);
         try { recognition.stop(); } catch {}
-        addEvent({ role: 'user', content: completeQuestion, metadata: { source: 'microphone' } });
+        addEvent({ role: 'user', content: completeQuestion, metadata: { source: 'microphone', hasBuffer: hasBuffer } });
+        
+        // Clear the buffer after using it
+        if (hasBuffer) {
+          rollingBufferRef.current = [];
+        }
         
         // Start response timer when question is finalized (voice)
         const startTime = Date.now();
@@ -1444,13 +1616,20 @@ const App: React.FC = () => {
       } else if (!isProcessing && !allFinalTranscripts.length && (status.includes("Listening") || status.includes("Mic active"))) {
         setStatus("No speech detected. Try again.");
       }
+      
+      // Resume background recognition if it was active
+      if (wasBackgroundActive && isActiveInterviewMode) {
+        setTimeout(() => {
+          startBackgroundRecognition();
+        }, 500);
+      }
     };
 
     try { recognition.start(); } catch (e) {
       console.error("recognition.start failed", e);
       setStatus("Error: Could not start microphone.");
     }
-  }, [isSpeechSupported, status, handleQuery, requestMicPermission, addEvent]);
+  }, [isSpeechSupported, status, handleQuery, requestMicPermission, addEvent, isActiveInterviewMode, getBufferedText, startBackgroundRecognition]);
 
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4 sm:p-8 flex items-start justify-center font-sans">
@@ -1521,6 +1700,45 @@ const App: React.FC = () => {
               {interviewMode === "qa" 
                 ? "Standard Q&A format for conversational responses"
                 : "Step-by-step process format for practical interviews"}
+            </p>
+          </div>
+
+          {/* Active Interview Mode Toggle */}
+          <div className="mb-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Active Interview</p>
+            <button
+              onClick={() => {
+                const newMode = !isActiveInterviewMode;
+                setIsActiveInterviewMode(newMode);
+                setStatus(newMode 
+                  ? "Active Interview mode enabled: Mic passively collecting last 30 seconds"
+                  : "Active Interview mode disabled");
+              }}
+              className={`w-full px-4 py-3 rounded-md text-sm font-semibold transition flex items-center justify-center gap-2 ${
+                isActiveInterviewMode
+                  ? "bg-blue-600 text-white shadow-lg hover:bg-blue-500"
+                  : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+              }`}
+              title={isActiveInterviewMode 
+                ? "Active Interview mode is ON - Mic passively collecting last 30 seconds"
+                : "Click to enable Active Interview mode - Mic will passively collect last 30 seconds"}
+            >
+              {isActiveInterviewMode ? (
+                <>
+                  <span className="animate-pulse">🔴</span>
+                  <span>Active Interview ON</span>
+                </>
+              ) : (
+                <>
+                  <span>⚪</span>
+                  <span>Active Interview OFF</span>
+                </>
+              )}
+            </button>
+            <p className="mt-2 text-[10px] text-gray-400">
+              {isActiveInterviewMode 
+                ? "Mic passively collecting last 30 seconds. Click mic button to include buffer in question."
+                : "Enable to passively collect last 30 seconds from mic"}
             </p>
           </div>
 
