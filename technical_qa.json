@@ -1,0 +1,59 @@
+[
+  {
+    "id": 1,
+    "question": "What is a query you would use in Splunk to discover the number of users that accessed a device?",
+    "answer": "To discover the number of users that accessed a device in Splunk, I would use:\n\n```\nindex=* sourcetype=* host=\"server_name\" (login success) | stats dc(user) as distinct_users\n```\n\nThis query searches all indices and sourcetypes for successful login events on a specific host, then uses the `stats` command with `dc()` (distinct count) to count unique users.",
+    "tags": ["Splunk", "SIEM", "logging", "query", "analytics"],
+    "category": "SIEM/Logging"
+  },
+  {
+    "id": 2,
+    "question": "How do you detect lateral movement in a network?",
+    "answer": "Lateral movement detection involves monitoring authentication patterns and network connections. Key indicators include:\n\n1. **Multiple failed logins followed by success** - Use SIEM queries to track authentication sequences\n2. **Unusual access patterns** - User accessing systems they don't typically interact with\n3. **SMB/RDP connections** - Particularly connections between workstations (not typical user behavior)\n4. **Kerberos anomalies** - Unusual ticket requests or privilege escalations\n\nI'd use Splunk queries like:\n```\nindex=wineventlog EventCode=4624 Type=10 | stats values(ComputerName) as accessed_systems by Account_Name | where mvcount(accessed_systems) > 5\n```\nThis identifies users accessing more than 5 different systems, which could indicate lateral movement.",
+    "tags": ["Lateral Movement", "Detection", "SIEM", "Network Security", "Threat Hunting"],
+    "category": "Detection/Threat Hunting"
+  },
+  {
+    "id": 3,
+    "question": "What is the difference between SIEM and SOAR?",
+    "answer": "SIEM (Security Information and Event Management) and SOAR (Security Orchestration, Automation, and Response) serve complementary roles:\n\n**SIEM:**\n- Aggregates and correlates security events from multiple sources\n- Provides real-time monitoring and alerting\n- Performs log analysis and threat detection\n- Generates security dashboards and reports\n\n**SOAR:**\n- Automates security workflows and response actions\n- Orchestrates multiple security tools\n- Executes playbooks for incident response\n- Integrates with SIEM to take automated actions on alerts\n\nThink of SIEM as the \"eyes\" (detection) and SOAR as the \"hands\" (automated response). They work together - SIEM detects threats, SOAR responds to them.",
+    "tags": ["SIEM", "SOAR", "Security Tools", "Automation", "Incident Response"],
+    "category": "Security Concepts"
+  },
+  {
+    "id": 4,
+    "question": "How do you perform a risk assessment?",
+    "answer": "A risk assessment follows a structured process:\n\n1. **Asset Identification** - Identify all systems, data, and processes\n2. **Threat Identification** - Identify potential threats (malware, insider threats, natural disasters, etc.)\n3. **Vulnerability Assessment** - Identify weaknesses that could be exploited\n4. **Likelihood Assessment** - Determine probability of threat occurrence\n5. **Impact Assessment** - Determine consequences if threat materializes\n6. **Risk Calculation** - Risk = Likelihood × Impact\n7. **Risk Prioritization** - Rank risks by severity\n8. **Mitigation Planning** - Develop controls to reduce risk\n9. **Documentation** - Document findings in a risk register\n\nI use frameworks like NIST 800-30 or ISO 27005 to guide the process. The key is being thorough and realistic about both likelihood and impact.",
+    "tags": ["Risk Assessment", "Compliance", "NIST", "ISO 27001", "Security Management"],
+    "category": "Risk Management"
+  },
+  {
+    "id": 5,
+    "question": "What is MITRE ATT&CK and how is it used?",
+    "answer": "MITRE ATT&CK is a knowledge base of adversary tactics and techniques based on real-world observations. It's structured as a matrix covering:\n\n**Tactics** (columns) - Goals adversaries try to achieve (Initial Access, Execution, Persistence, etc.)\n**Techniques** (cells) - Methods adversaries use to achieve tactics\n**Sub-techniques** - More specific variations\n\n**How it's used:**\n1. **Detection Engineering** - Map detections to specific techniques\n2. **Threat Hunting** - Hunt for specific adversary behaviors\n3. **Gap Analysis** - Identify detection coverage gaps\n4. **Incident Response** - Understand adversary TTPs during investigations\n5. **Security Testing** - Red team exercises using ATT&CK techniques\n\nI've mapped SIEM detections to ~80% of the MITRE ATT&CK matrix to ensure comprehensive coverage and standardized SOC workflows.",
+    "tags": ["MITRE ATT&CK", "Threat Intelligence", "Detection", "Threat Hunting", "Framework"],
+    "category": "Threat Intelligence"
+  },
+  {
+    "id": 6,
+    "question": "How do you tune SIEM alerts to reduce false positives?",
+    "answer": "SIEM alert tuning involves several steps:\n\n1. **Analyze False Positive Patterns** - Review historical alerts to identify common false positive triggers\n2. **Add Context Filters** - Include asset criticality, user roles, and business hours in detection logic\n3. **Refine Thresholds** - Adjust frequency and volume thresholds based on normal baselines\n4. **Whitelist Legitimate Activity** - Create allowlists for known-good systems and users\n5. **Improve Correlation Logic** - Combine multiple events to reduce single-event false positives\n6. **Validate Against Known Attacks** - Ensure tuning doesn't break detection of real threats\n7. **Iterate and Test** - Continuously refine based on SOC feedback\n\nI've reduced false positives by ~40% through systematic tuning, which freed analysts to focus on high-fidelity incidents.",
+    "tags": ["SIEM", "Alert Tuning", "False Positives", "SOC", "Detection Engineering"],
+    "category": "SIEM/Detection"
+  },
+  {
+    "id": 7,
+    "question": "What is the difference between IAM and PAM?",
+    "answer": "IAM (Identity and Access Management) and PAM (Privileged Access Management) manage different aspects of access:\n\n**IAM:**\n- Manages standard user identities and access\n- Handles authentication and authorization for regular users\n- Includes SSO, MFA, and user provisioning\n- Covers broad access to applications and systems\n\n**PAM:**\n- Manages privileged accounts (admins, service accounts, root access)\n- Provides additional security for high-risk accounts\n- Includes credential vaulting, rotation, and session monitoring\n- Requires higher scrutiny due to elevated privileges\n\nThink of IAM as managing \"who you are\" and PAM as managing \"special access\" - PAM is a subset of IAM focused on the most sensitive accounts. I've audited CyberArk (PAM) configurations to ensure privileged access follows least-privilege principles.",
+    "tags": ["IAM", "PAM", "Access Control", "Identity Management", "Privileged Access"],
+    "category": "Identity & Access"
+  },
+  {
+    "id": 8,
+    "question": "How do you secure a cloud environment?",
+    "answer": "Cloud security requires a multi-layered approach:\n\n**Identity & Access:**\n- Enforce least privilege with IAM policies\n- Enable MFA for all accounts\n- Use role-based access control (RBAC)\n- Regularly audit permissions\n\n**Network Security:**\n- Implement security groups and network ACLs\n- Use VPCs to isolate resources\n- Enable flow logs for monitoring\n- Restrict public-facing resources\n\n**Data Protection:**\n- Encrypt data at rest and in transit\n- Use encryption keys managed by cloud provider\n- Implement data classification\n- Enable backup and disaster recovery\n\n**Monitoring & Detection:**\n- Enable CloudTrail/CloudWatch (AWS) or equivalent\n- Deploy GuardDuty or similar threat detection\n- Monitor for misconfigurations\n- Set up alerting for suspicious activity\n\n**Compliance:**\n- Follow cloud security frameworks (CIS Benchmarks, NIST)\n- Conduct regular security assessments\n- Implement configuration management\n\nI've hardened AWS accounts through IAM, GuardDuty, and monitoring, reducing unauthorized access by ~60%.",
+    "tags": ["Cloud Security", "AWS", "Azure", "GCP", "Infrastructure Security"],
+    "category": "Cloud Security"
+  }
+]
+

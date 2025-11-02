@@ -14,22 +14,29 @@ interface ConversationEvent {
 }
 
 // Profile types
+interface TechnicalQA {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 interface CompanyProfile {
   id: string;
   name: string;
   aboutCompany: string;
   jobDescription: string;
   technicalInfo: string;
+  technicalQAs: TechnicalQA[];
   updatedAt: number;
 }
 const PROFILES_STORAGE_KEY = 'aiInterviewProfiles';
 
 // --- Text Generation (calls /api/generate) ---
-async function generateText(prompt: string): Promise<string> {
+async function generateText(prompt: string, technicalQAs?: Array<{ question: string; answer: string }>, interviewMode?: "qa" | "procedural", interviewRound?: number, profileId?: string): Promise<string> {
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, technicalQAs: technicalQAs || [], interviewMode: interviewMode || "qa", interviewRound: interviewRound || 1, profileId: profileId || "" }),
   });
 
   if (!response.ok) {
@@ -43,6 +50,50 @@ async function generateText(prompt: string): Promise<string> {
     result.candidates?.[0]?.content?.parts?.[0]?.text ||
     "Sorry, I couldn't generate a response.";
   return text.trim();
+}
+
+// --- Parse procedural steps from text ---
+function parseProceduralSteps(text: string): string[] {
+  const steps: string[] = [];
+  
+  // Try to match numbered steps (Step 1:, Step 2:, etc. or 1., 2., etc.)
+  const stepPatterns = [
+    /Step\s+(\d+)[:\.]\s*([\s\S]+?)(?=Step\s+\d+[:\.]|$)/gi,
+    /^(\d+)[:\.]\s*([\s\S]+?)(?=^\d+[:\.]|$)/gim,
+  ];
+  
+  for (const pattern of stepPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    if (matches.length > 0) {
+      matches.forEach(match => {
+        const stepText = match[2]?.trim() || match[0]?.trim();
+        if (stepText && stepText.length > 10) {
+          steps.push(stepText);
+        }
+      });
+      if (steps.length > 0) break;
+    }
+  }
+  
+  // If no numbered steps found, try to split by newlines and find logical breaks
+  if (steps.length === 0) {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let currentStep = "";
+    for (const line of lines) {
+      if (line.match(/^(first|second|third|fourth|fifth|next|then|finally|step|goal|objective)/i)) {
+        if (currentStep) steps.push(currentStep);
+        currentStep = line;
+      } else if (currentStep && line.length > 20) {
+        currentStep += " " + line;
+      } else if (line.length > 50) {
+        if (currentStep) steps.push(currentStep);
+        currentStep = line;
+      }
+    }
+    if (currentStep) steps.push(currentStep);
+  }
+  
+  return steps.length > 0 ? steps : [text]; // Fallback to full text if no steps found
 }
 
 // --- Extract code blocks from text ---
@@ -110,6 +161,7 @@ function extractCodeBlocks(text: string): { cleanText: string; codeBlocks: strin
 interface ScrollingTextDisplayProps {
   fullText: string;
   readingSpeed?: number; // Base characters per second
+  onScrollingStart?: () => void; // Callback when scrolling animation starts
 }
 
 const PAUSE_REGEX = /(\(pause\))/gi;
@@ -117,6 +169,7 @@ const PAUSE_REGEX = /(\(pause\))/gi;
 const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
   fullText,
   readingSpeed = 12, // Base: ~12 characters per second (adjustable)
+  onScrollingStart,
 }) => {
   const textRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -126,6 +179,7 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
   const isPausedRef = useRef<boolean>(false); // Use ref to check pause state in animation loop
   const [isPaused, setIsPaused] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const lastNotifiedTextRef = useRef<string>(""); // Track which text we've already notified for
 
   // Helper: render text with a highlighted (pause) marker
   const renderWithPauseMarker = (text: string) => {
@@ -166,6 +220,15 @@ const ScrollingTextDisplay: React.FC<ScrollingTextDisplayProps> = ({
     isPausedRef.current = false;
     pausedElapsedRef.current = 0;
     setIsAnimating(true);
+    
+    // Notify parent that scrolling has started (only once per unique text)
+    if (onScrollingStart && fullText && fullText !== lastNotifiedTextRef.current) {
+      lastNotifiedTextRef.current = fullText;
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        onScrollingStart();
+      });
+    }
 
     // Measure text and container
     const textWidth = textRef.current.scrollWidth;
@@ -443,6 +506,18 @@ const App: React.FC = () => {
   const [technicalInfo, setTechnicalInfo] = useState("");
   const [hasMounted, setHasMounted] = useState(false);
   const [readingSpeed, setReadingSpeed] = useState(12); // Characters per second
+  
+  // Generation state flags (separate from status for button control)
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  // Response timer state
+  const [responseTimerStart, setResponseTimerStart] = useState<number | null>(null);
+  const [responseTime, setResponseTime] = useState<number | null>(null);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerStartRef = useRef<number | null>(null); // Track start time via ref for reliable access
+  const isTimerRunningRef = useRef<boolean>(false); // Track running state via ref to avoid stale closures
 
   // Recording session state
   const [isSessionRecording, setIsSessionRecording] = useState(false);
@@ -452,6 +527,15 @@ const App: React.FC = () => {
   const [profiles, setProfiles] = useState<CompanyProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [profileNameInput, setProfileNameInput] = useState<string>("");
+  const [technicalQAs, setTechnicalQAs] = useState<TechnicalQA[]>([]);
+
+  // Interview mode state
+  type InterviewMode = "qa" | "procedural";
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>("qa");
+  const [proceduralSteps, setProceduralSteps] = useState<string[]>([]);
+  
+  // Interview round state
+  const [interviewRound, setInterviewRound] = useState<number>(1);
 
   // Conversation state
   const [conversation, setConversation] = useState<ConversationEvent[]>([]);
@@ -465,6 +549,39 @@ const App: React.FC = () => {
     };
     setConversation(prev => [...prev, event]);
   }, []);
+
+  const clearStoredResponses = useCallback(async () => {
+    if (!selectedProfileId) {
+      setStatus("Please select a profile first before clearing stored responses.");
+      return;
+    }
+    
+    if (!confirm(`Are you sure you want to clear stored responses for the current profile (Round ${interviewRound})? This will remove all previously generated responses for this profile and round, and cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch("/api/clear-responses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: selectedProfileId,
+          interviewRound: interviewRound,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setStatus(`Cleared ${data.count} stored response(s) for current profile (Round ${interviewRound}).`);
+      } else {
+        setStatus(`Error clearing responses: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error("Error clearing stored responses:", error);
+      setStatus("Failed to clear stored responses. See console.");
+    }
+  }, [selectedProfileId, interviewRound]);
 
   const downloadTranscript = useCallback(() => {
     const payload = {
@@ -545,7 +662,123 @@ const App: React.FC = () => {
       : null;
   const isSpeechSupported = !!SpeechRecognition;
 
-  useEffect(() => setHasMounted(true), []);
+  // Timer effect to update display while running
+  useEffect(() => {
+    // Clear any existing interval first
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    // If timer is not running, ensure everything is cleared
+    if (!isTimerRunning || !responseTimerStart) {
+      timerStartRef.current = null;
+      isTimerRunningRef.current = false;
+      return;
+    }
+
+    // Store start time in ref for reliable access
+    timerStartRef.current = responseTimerStart;
+    isTimerRunningRef.current = true;
+
+    // Create interval only if timer is running
+    const interval = setInterval(() => {
+      // Check ref instead of state to avoid stale closures
+      if (timerStartRef.current && isTimerRunningRef.current) {
+        const elapsed = Date.now() - timerStartRef.current;
+        setResponseTime(elapsed);
+      } else {
+        // Timer was stopped, clear interval
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+        }
+      }
+    }, 10); // Update every 10ms for smooth display
+
+    timerIntervalRef.current = interval;
+
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+  }, [isTimerRunning, responseTimerStart]);
+
+  // Function to stop timer explicitly
+  const stopTimer = useCallback(() => {
+    // Clear interval immediately - this MUST happen first
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    
+    // Mark timer as stopped in ref immediately
+    isTimerRunningRef.current = false;
+    
+    // Calculate elapsed time using ref (most reliable source)
+    let elapsed: number | null = null;
+    if (timerStartRef.current) {
+      elapsed = Date.now() - timerStartRef.current;
+    } else if (responseTimerStart) {
+      elapsed = Date.now() - responseTimerStart;
+    }
+    
+    // Stop timer state - use batch updates to ensure consistency
+    if (timerStartRef.current || responseTimerStart) {
+      setIsTimerRunning(false);
+      setResponseTimerStart(null);
+      timerStartRef.current = null;
+      
+      if (elapsed !== null) {
+        setResponseTime(elapsed);
+      }
+    }
+    
+    return elapsed;
+  }, [responseTimerStart]);
+
+  // Format time for display
+  const formatResponseTime = useCallback((ms: number | null): string => {
+    if (ms === null) return "0.00s";
+    return (ms / 1000).toFixed(2) + "s";
+  }, []);
+
+  // Callback to stop timer when scrolling starts
+  const handleScrollingStart = useCallback(() => {
+    // Stop timer when scrolling actually starts
+    if (isTimerRunning && responseTimerStart) {
+      const elapsed = Date.now() - responseTimerStart;
+      setResponseTime(elapsed);
+      setIsTimerRunning(false);
+      
+      // Update the last assistant event with response time if it exists
+      setConversation(prev => {
+        const updated = [...prev];
+        // Find the last assistant event
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].role === 'assistant' && !updated[i].metadata?.responseTimeMs) {
+            updated[i] = {
+              ...updated[i],
+              metadata: {
+                ...updated[i].metadata,
+                responseTimeMs: elapsed,
+                responseTimeFormatted: formatResponseTime(elapsed)
+              }
+            };
+            break;
+          }
+        }
+        return updated;
+      });
+    }
+  }, [isTimerRunning, responseTimerStart, formatResponseTime]);
+
+  // Set hasMounted to true after component mounts (prevents hydration issues)
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   // Load profiles from localStorage
   useEffect(() => {
@@ -553,10 +786,11 @@ const App: React.FC = () => {
       const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CompanyProfile[];
-        // Migrate old profiles that don't have technicalInfo field
+        // Migrate old profiles that don't have technicalInfo or technicalQAs fields
         const migrated = parsed.map((p: any) => ({
           ...p,
           technicalInfo: p.technicalInfo || "",
+          technicalQAs: p.technicalQAs || [],
         }));
         setProfiles(Array.isArray(migrated) ? migrated : []);
       }
@@ -580,6 +814,7 @@ const App: React.FC = () => {
       setAboutCompany(p.aboutCompany || "");
       setJobDescription(p.jobDescription || "");
       setTechnicalInfo(p.technicalInfo || "");
+      setTechnicalQAs(p.technicalQAs || []);
       setStatus(`Loaded profile: ${p.name}`);
     }
   }, [profiles]);
@@ -598,6 +833,7 @@ const App: React.FC = () => {
         aboutCompany,
         jobDescription,
         technicalInfo,
+        technicalQAs,
         updatedAt: Date.now(),
       } : p));
       setStatus(`Updated profile: ${name}`);
@@ -609,17 +845,19 @@ const App: React.FC = () => {
         aboutCompany,
         jobDescription,
         technicalInfo,
+        technicalQAs,
         updatedAt: Date.now(),
       };
       setProfiles(prev => [newProfile, ...prev]);
       setSelectedProfileId(newProfile.id);
       setStatus(`Saved new profile: ${name}`);
     }
-  }, [profileNameInput, aboutCompany, jobDescription, technicalInfo, selectedProfileId]);
+  }, [profileNameInput, aboutCompany, jobDescription, technicalInfo, technicalQAs, selectedProfileId]);
 
   const newProfile = useCallback(() => {
     setSelectedProfileId("");
     setProfileNameInput("");
+    setTechnicalQAs([]);
     // Do not clear fields automatically so user can start from current content if desired
     setStatus("New profile: set a name and save.");
   }, []);
@@ -633,8 +871,29 @@ const App: React.FC = () => {
     setProfiles(prev => prev.filter(pr => pr.id !== selectedProfileId));
     setSelectedProfileId("");
     setProfileNameInput("");
+    setTechnicalQAs([]);
     setStatus(`Deleted profile${p ? `: ${p.name}` : ''}.`);
   }, [selectedProfileId, profiles]);
+
+  // Technical Q&A management functions
+  const addTechnicalQA = useCallback(() => {
+    const newQA: TechnicalQA = {
+      id: generateId(),
+      question: "",
+      answer: "",
+    };
+    setTechnicalQAs(prev => [...prev, newQA]);
+  }, []);
+
+  const updateTechnicalQA = useCallback((id: string, field: 'question' | 'answer', value: string) => {
+    setTechnicalQAs(prev => prev.map(qa => 
+      qa.id === id ? { ...qa, [field]: value } : qa
+    ));
+  }, []);
+
+  const removeTechnicalQA = useCallback((id: string) => {
+    setTechnicalQAs(prev => prev.filter(qa => qa.id !== id));
+  }, []);
 
   // Prompt mic permission explicitly; helps some browsers prompt reliably
   const requestMicPermission = useCallback(async (): Promise<boolean> => {
@@ -666,7 +925,7 @@ const App: React.FC = () => {
     try {
       const clarifyingPrompt = `Based on this interview question, generate 3-4 concise clarifying questions that would help understand what specific direction or angle the interviewer wants the answer to take. The clarifying questions should be short (one sentence each) and focused on different aspects (technical depth, specific examples, industry context, etc.).\n\nOriginal question: "${originalQuestion}"\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : ""}\n\nGenerate clarifying questions as a simple list, one per line, without numbering or bullets.`;
 
-      const clarifyingText = await generateText(clarifyingPrompt);
+      const clarifyingText = await generateText(clarifyingPrompt, technicalQAs.filter(qa => qa.question.trim() && qa.answer.trim()));
       
       if (clarifyingText) {
         const questions = clarifyingText
@@ -692,9 +951,9 @@ const App: React.FC = () => {
     } finally {
       setIsGeneratingClarifying(false);
     }
-  }, [aboutCompany, technicalInfo, addEvent]);
+  }, [aboutCompany, technicalInfo, technicalQAs, addEvent]);
 
-  const handleQuery = useCallback(async (query: string, isClarification: boolean = false) => {
+  const handleQuery = useCallback(async (query: string, isClarification: boolean = false, round?: number) => {
     if (!query || query.trim().length < 5) {
       setStatus("Query is too short or empty. Cannot proceed.");
       return;
@@ -705,11 +964,22 @@ const App: React.FC = () => {
 
     if (!isClarification) {
       addEvent({ role: 'user', content: query });
+      
+      // Start response timer for typed questions (voice questions already started timer)
+      if (!isTimerRunning) {
+        const startTime = Date.now();
+        setResponseTimerStart(startTime);
+        timerStartRef.current = startTime;
+        isTimerRunningRef.current = true;
+        setIsTimerRunning(true);
+        setResponseTime(null);
+      }
     }
     // Note: For clarifications, we don't log the combined prompt here because
     // the actual user clarification answer is already logged separately
     // in startListeningForClarification (line 747)
 
+    setIsGeneratingResponse(true);
     setStatus("Generating response...");
     if (!isClarification) {
       setFullResponse("");
@@ -721,11 +991,23 @@ const App: React.FC = () => {
       const companyContext = aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : "";
       const roleContext = jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : "";
       const techContext = technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : "";
-      const rolePreamble =
-        (companyContext || roleContext || techContext
-          ? `${companyContext}${roleContext}${techContext}\nAnswer the interview question tailored to this context. Keep it spoken-style and aim for ~30 seconds (~70–90 words).\n\nInterview question: ${fullQuery}`
-          : `Answer in ~30 seconds (~70–90 words), spoken-style.\n\nInterview question: ${fullQuery}`);
-      const generatedText = await generateText(rolePreamble);
+      
+      let rolePreamble: string;
+      if (interviewMode === "procedural") {
+        // Procedural interview mode - format as step-by-step process with SPECIFIC commands and locations
+        rolePreamble =
+          (companyContext || roleContext || techContext
+            ? `${companyContext}${roleContext}${techContext}\nThis is a PROCEDURAL INTERVIEW question. The interviewer wants SPECIFIC, ACTIONABLE steps with exact commands, tools, and locations.\n\nFormat your response as a clear, numbered list of steps.\n\nFor each step, structure it as:\nStep X: [Goal/Objective] - [Specific actions including:\n  - Exact commands (CLI, API calls, scripts) with actual syntax\n  - Specific locations in cloud platforms (e.g., "AWS GuardDuty → Findings → Filter by severity 'HIGH'")\n  - Exact paths, URLs, or navigation steps\n  - Specific tools and their exact locations/features]\n\nCRITICAL: Include SPECIFIC details:\n- Actual commands (e.g., \`aws guardduty list-findings --finding-criteria file://criteria.json\`)\n- Exact cloud service locations (e.g., "Navigate to Azure Security Center → Security alerts → Filter by severity 'High'")\n- Specific navigation paths (e.g., "GCP Security Command Center → Findings → Filter by severity 'CRITICAL'")\n- Exact tools and features used\n\nBe concrete and actionable - avoid vague descriptions.\n\nProcedural question: ${fullQuery}`
+            : `This is a PROCEDURAL INTERVIEW question. Format your response as a clear, numbered list of steps with SPECIFIC commands and locations.\n\nFor each step, structure it as:\nStep X: [Goal/Objective] - [Specific actions including exact commands, cloud service locations, and tools]\n\nCRITICAL: Include SPECIFIC details like actual commands, exact cloud service navigation paths, and specific tool locations.\n\nProcedural question: ${fullQuery}`);
+      } else {
+        // Q&A interview mode (default)
+        rolePreamble =
+          (companyContext || roleContext || techContext
+            ? `${companyContext}${roleContext}${techContext}\nAnswer the interview question tailored to this context. Keep it spoken-style and aim for ~30 seconds (~70–90 words).\n\nInterview question: ${fullQuery}`
+            : `Answer in ~30 seconds (~70–90 words), spoken-style.\n\nInterview question: ${fullQuery}`);
+      }
+      
+      const generatedText = await generateText(rolePreamble, technicalQAs.filter(qa => qa.question.trim() && qa.answer.trim()), interviewMode, round || interviewRound, selectedProfileId);
 
       if (
         !generatedText ||
@@ -739,11 +1021,67 @@ const App: React.FC = () => {
           "The assistant could not generate a response for that query, possibly due to a safety policy violation. Please try a different question."
         );
         setCodeBlocks([]);
+        setIsGeneratingResponse(false);
+        
+        // Stop timer on no response
+        stopTimer();
+        
         addEvent({ role: 'assistant', content: '[No response generated]' });
         return;
       }
 
       let { cleanText, codeBlocks: extractedBlocks } = extractCodeBlocks(generatedText);
+      
+      // Parse procedural steps if in procedural mode
+      if (interviewMode === "procedural") {
+        const steps = parseProceduralSteps(cleanText);
+        setProceduralSteps(steps);
+        setFullResponse(cleanText); // Store full response for reference
+        setCodeBlocks(extractedBlocks);
+        setStatus("Procedural steps ready.");
+        setIsGeneratingResponse(false);
+        
+        // Stop timer immediately when procedural steps are ready (no scrolling in procedural mode)
+        // Call stopTimer unconditionally - it will check if timer is actually running
+        const elapsed = stopTimer();
+        
+        if (elapsed !== null) {
+          // Update event metadata with response time
+          setConversation(prev => {
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].role === 'assistant' && !updated[i].metadata?.responseTimeMs) {
+                updated[i] = {
+                  ...updated[i],
+                  metadata: {
+                    ...updated[i].metadata,
+                    responseTimeMs: elapsed,
+                    responseTimeFormatted: formatResponseTime(elapsed),
+                    type: 'procedural',
+                    steps: steps.length
+                  }
+                };
+                break;
+              }
+            }
+            return updated;
+          });
+        }
+        
+        addEvent({ 
+          role: 'assistant', 
+          content: cleanText, 
+          metadata: { 
+            codeBlocks: extractedBlocks,
+            type: 'procedural',
+            steps: steps.length
+          }
+        });
+        
+        return; // Early return for procedural mode
+      } else {
+        setProceduralSteps([]);
+      }
       
       const isTechnicalQuestion = /(?:technical|technology|system|process|tool|method|how does|how do|implementation|architecture|infrastructure|code|script|query|database|network|security|cloud|API|algorithm|configuration)/i.test(query);
       
@@ -759,15 +1097,22 @@ const App: React.FC = () => {
       setFullResponse(cleanText);
       setCodeBlocks(extractedBlocks);
       setStatus("Response ready. Scrolling text...");
+      setIsGeneratingResponse(false);
 
+      // Don't stop timer here - wait for scrolling to start via callback
       addEvent({ role: 'assistant', content: cleanText, metadata: { codeBlocks: extractedBlocks } });
     } catch (error: any) {
       console.error("Query process failed:", error);
       setFullResponse("A network or API error occurred. Check the console.");
       setStatus("Failed: API communication failed. See console.");
+      setIsGeneratingResponse(false);
+      
+      // Stop timer on error
+      stopTimer();
+      
       addEvent({ role: 'assistant', content: '[API error]' });
     }
-  }, [jobDescription, aboutCompany, technicalInfo, addEvent]);
+  }, [jobDescription, aboutCompany, technicalInfo, technicalQAs, addEvent, interviewMode, formatResponseTime, stopTimer]);
 
   // Go deeper using the existing question and current response
   const generateDeeperAnswer = useCallback(async () => {
@@ -779,10 +1124,18 @@ const App: React.FC = () => {
       setIsGeneratingDeeper(true);
       setStatus("Generating deeper, more specific answer...");
       addEvent({ role: 'meta', content: 'Generating deeper answer' });
+      
+      // Start timer for deeper answer generation
+      const startTime = Date.now();
+      setResponseTimerStart(startTime);
+      timerStartRef.current = startTime;
+      isTimerRunningRef.current = true;
+      setIsTimerRunning(true);
+      setResponseTime(null);
 
       const deeperPrompt = `The interviewer asked the following question and the candidate answered. Please produce a deeper, more specific answer that builds directly on the existing answer. Add technical specifics, trade-offs, concrete examples, concise metrics, and relevant tools or methods where appropriate. Keep it conversational, spoken-style, and target ~30 seconds (~70–90 words).\n\nOriginal question: "${question}"\n\n${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${jobDescription.trim() ? `Role context (job description):\n${jobDescription.trim()}\n` : ""}${technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : ""}\n\nExisting answer: "${fullResponse}"\n\nNow provide a refined, deeper answer that assumes the listener heard the existing answer and expands on the most important specifics (without repeating filler).`;
 
-      const generatedText = await generateText(deeperPrompt);
+      const generatedText = await generateText(deeperPrompt, technicalQAs.filter(qa => qa.question.trim() && qa.answer.trim()), interviewMode, interviewRound, selectedProfileId);
       if (!generatedText || generatedText.trim().length === 0) {
         setStatus("Deeper answer generation returned empty. Try again.");
         return;
@@ -797,15 +1150,23 @@ const App: React.FC = () => {
       setFullResponse(cleanText);
       setCodeBlocks(extractedBlocks);
       setStatus("Deeper response ready. Scrolling text...");
+      setIsGeneratingDeeper(false);
+      
+      // Don't stop timer here - wait for scrolling to start
       addEvent({ role: 'assistant', content: cleanText, metadata: { codeBlocks: extractedBlocks, type: 'deeper' } });
     } catch (e) {
       console.error("Deeper generation failed:", e);
       setStatus("Failed to generate deeper answer.");
+      setIsGeneratingDeeper(false);
+      
+      // Stop timer on error
+      stopTimer();
+      
       addEvent({ role: 'assistant', content: '[Deeper generation failed]' });
     } finally {
       setIsGeneratingDeeper(false);
     }
-  }, [question, fullResponse, jobDescription, aboutCompany, technicalInfo, addEvent]);
+  }, [question, fullResponse, jobDescription, aboutCompany, technicalInfo, technicalQAs, addEvent, stopTimer]);
 
   const useClarifyingQuestion = useCallback(async (clarifyingQ: string, originalQ: string) => {
     setPendingClarification({
@@ -876,10 +1237,18 @@ const App: React.FC = () => {
         try { recognition.stop(); } catch {}
         addEvent({ role: 'user', content: clarificationAnswer, metadata: { type: 'clarification_answer', clarifyingQuestion } });
         
+        // Start response timer for clarification answer
+        const startTime = Date.now();
+        setResponseTimerStart(startTime);
+        timerStartRef.current = startTime;
+        isTimerRunningRef.current = true;
+        setIsTimerRunning(true);
+        setResponseTime(null);
+        
         const combinedPrompt = `Based on this original interview answer, the interviewer asked a clarifying question, and the candidate provided additional information. Please provide a refined, comprehensive answer that incorporates both the original response and the new clarification.\n\nOriginal question: "${originalQuestion}"\n\nOriginal answer: "${originalAnswer}"\n\nClarifying question asked: "${clarifyingQuestion}"\n\nClarification provided: "${clarificationAnswer}"\n\nPlease provide a refined answer that:\n1. Maintains the key points from the original answer\n2. Integrates the new information from the clarification\n3. Provides a more complete and targeted response\n 4. Stays conversational and natural\n${jobDescription.trim() ? `\nRole context (job description):\n${jobDescription.trim()}\n` : ""}${aboutCompany.trim() ? `Company context (about company):\n${aboutCompany.trim()}\n` : ""}${technicalInfo.trim() ? `Technical information:\n${technicalInfo.trim()}\n` : ""}`;
 
         setScrollingPrompt("");
-        handleQuery(combinedPrompt, true);
+        handleQuery(combinedPrompt, true, interviewRound);
         setPendingClarification(null);
       }
     };
@@ -947,10 +1316,20 @@ const App: React.FC = () => {
       if (completeQuestion.length > 10) {
         isProcessing = true;
         clearSpeechTimeout();
+        setIsListening(false);
         setQuestion(completeQuestion);
         setStatus("Complete question: " + completeQuestion.substring(0, 60) + (completeQuestion.length > 60 ? "..." : ""));
         try { recognition.stop(); } catch {}
         addEvent({ role: 'user', content: completeQuestion, metadata: { source: 'microphone' } });
+        
+        // Start response timer when question is finalized (voice)
+        const startTime = Date.now();
+        setResponseTimerStart(startTime);
+        timerStartRef.current = startTime;
+        isTimerRunningRef.current = true;
+        setIsTimerRunning(true);
+        setResponseTime(null);
+        
         handleQuery(completeQuestion);
       }
     };
@@ -959,6 +1338,7 @@ const App: React.FC = () => {
 
     recognition.onstart = () => {
       setStatus("Listening continuously... Speak your full question clearly.");
+      setIsListening(true);
       allFinalTranscripts = [];
       interimTranscript = "";
       isProcessing = false;
@@ -1053,9 +1433,11 @@ const App: React.FC = () => {
         return;
       }
       setStatus("Speech Error: " + err);
+      setIsListening(false);
     };
     recognition.onend = () => {
       clearSpeechTimeout();
+      setIsListening(false);
       // If we have final transcripts but haven't processed yet, do it now
       if (!isProcessing && allFinalTranscripts.length > 0) {
         processCompleteQuestion();
@@ -1075,23 +1457,103 @@ const App: React.FC = () => {
       <div className="w-full max-w-6xl flex gap-4">
         {/* Left column: Ask button fixed on the left */}
         <div className="flex-shrink-0 sticky top-6 self-start">
+          {/* Interview Round Selector */}
+          <div className="mb-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Interview Round</p>
+            <div className="grid grid-cols-7 gap-1">
+              {[1, 2, 3, 4, 5, 6, 7].map((round) => (
+                <button
+                  key={round}
+                  onClick={() => {
+                    setInterviewRound(round);
+                    setStatus(`Selected Round ${round}`);
+                  }}
+                  className={`px-2 py-2 rounded-md text-xs font-semibold transition ${
+                    interviewRound === round
+                      ? "bg-emerald-600 text-white shadow-lg"
+                      : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                  }`}
+                  title={`Round ${round}`}
+                >
+                  {round}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-gray-400">
+              Questions and responses stored separately per round
+            </p>
+          </div>
+
+          {/* Interview Mode Selector */}
+          <div className="mb-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Interview Mode</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setInterviewMode("qa");
+                  setProceduralSteps([]);
+                  setStatus("Switched to Question & Answer mode");
+                }}
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold transition ${
+                  interviewMode === "qa"
+                    ? "bg-emerald-600 text-white shadow-lg"
+                    : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                }`}
+              >
+                Q&A Interview
+              </button>
+              <button
+                onClick={() => {
+                  setInterviewMode("procedural");
+                  setProceduralSteps([]);
+                  setStatus("Switched to Procedural Interview mode");
+                }}
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold transition ${
+                  interviewMode === "procedural"
+                    ? "bg-emerald-600 text-white shadow-lg"
+                    : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                }`}
+              >
+                Procedural Interview
+              </button>
+            </div>
+            <p className="mt-2 text-[10px] text-gray-400">
+              {interviewMode === "qa" 
+                ? "Standard Q&A format for conversational responses"
+                : "Step-by-step process format for practical interviews"}
+            </p>
+          </div>
+
           <button
             onClick={startListening}
             disabled={
               !hasMounted ||
               !isSpeechSupported ||
-              status.includes("Listening") ||
-              status.includes("Generating")
+              isListening ||
+              isGeneratingResponse ||
+              isGeneratingDeeper ||
+              isGeneratingClarifying
             }
             className={`p-5 rounded-full shadow-lg transition duration-200 ease-in-out flex items-center space-x-2 text-xl font-bold ${
               !hasMounted ||
               !isSpeechSupported ||
-              status.includes("Listening") ||
-              status.includes("Generating")
+              isListening ||
+              isGeneratingResponse ||
+              isGeneratingDeeper ||
+              isGeneratingClarifying
                 ? "bg-gray-500 cursor-not-allowed"
                 : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transform hover:scale-105"
             }`}
             aria-label="Start listening for question"
+            title={
+              !hasMounted ? "Initializing..." :
+              !isSpeechSupported ? "Speech Recognition not supported" :
+              isListening ? "Currently listening" :
+              isGeneratingResponse ? "Generating response" :
+              isGeneratingDeeper ? "Generating deeper answer" :
+              isGeneratingClarifying ? "Generating clarifying questions" :
+              "Click to start listening"
+            }
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -1281,6 +1743,66 @@ const App: React.FC = () => {
             />
             <p className="mt-1 text-[10px] text-gray-400">This will be included to tailor technical responses.</p>
           </div>
+
+          {/* Technical Q&A Management */}
+          <div className="mt-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-300">Technical Q&A (per profile)</p>
+              <button
+                onClick={addTechnicalQA}
+                className="px-2 py-1 rounded text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white"
+                title="Add new Q&A pair"
+              >
+                + Add
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mb-3">
+              Add questions and answers that will be available when this profile is active.
+            </p>
+            
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+              {technicalQAs.length === 0 ? (
+                <p className="text-xs text-gray-500 italic">No Q&A pairs added yet. Click "Add" to add one.</p>
+              ) : (
+                technicalQAs.map((qa, index) => (
+                  <div key={qa.id} className="bg-gray-800 p-3 rounded-md border border-gray-600">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-400">Q&A #{index + 1}</span>
+                      <button
+                        onClick={() => removeTechnicalQA(qa.id)}
+                        className="text-xs text-red-400 hover:text-red-300"
+                        title="Remove this Q&A pair"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">Question:</label>
+                        <textarea
+                          value={qa.question}
+                          onChange={(e) => updateTechnicalQA(qa.id, 'question', e.target.value)}
+                          rows={2}
+                          placeholder="Enter technical question..."
+                          className="w-full resize-none rounded-md bg-gray-900 text-white p-2 text-xs outline-none border border-gray-700 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">Answer:</label>
+                        <textarea
+                          value={qa.answer}
+                          onChange={(e) => updateTechnicalQA(qa.id, 'answer', e.target.value)}
+                          rows={4}
+                          placeholder="Enter detailed answer (include commands, queries, code snippets as needed)..."
+                          className="w-full resize-none rounded-md bg-gray-900 text-white p-2 text-xs outline-none border border-gray-700 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right column: main content card */}
@@ -1296,7 +1818,7 @@ const App: React.FC = () => {
             </h2>
             <div className="flex items-center gap-3">
               <label className="text-sm text-gray-400">
-                Speed: {readingSpeed}
+                Speed: {readingSpeed} chars/sec
               </label>
               <input
                 type="range"
@@ -1309,7 +1831,7 @@ const App: React.FC = () => {
                 aria-label="Reading speed control"
               />
               <span className="text-xs text-gray-500">
-                {readingSpeed < 10 ? "Slow" : readingSpeed < 20 ? "Medium" : "Fast"}
+                {readingSpeed < 10 ? "Slow" : readingSpeed < 20 ? "Medium" : "Fast"} ({Math.round(readingSpeed * 12)} WPM)
               </span>
             </div>
           </div>
@@ -1317,9 +1839,62 @@ const App: React.FC = () => {
             {/* Left side - Scrolling text */}
             <div className="flex flex-col lg:col-span-2">
               
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Narrative Response</h3>
-              <ScrollingTextDisplay fullText={scrollingPrompt || fullResponse} readingSpeed={readingSpeed} />
-              {fullResponse && (
+              <h3 className="text-sm font-medium text-gray-400 mb-2">
+                {interviewMode === "procedural" ? "Procedural Steps" : "Narrative Response"}
+              </h3>
+              
+              {interviewMode === "procedural" && proceduralSteps.length > 0 ? (
+                // Procedural mode: Display steps
+                <div className="bg-gray-800 p-6 rounded-lg border-2 border-emerald-500 shadow-xl space-y-4 max-h-[600px] overflow-y-auto">
+                  {proceduralSteps.map((step, index) => (
+                    <div key={index} className="bg-gray-700 p-4 rounded-lg border-l-4 border-emerald-400">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-white text-base leading-relaxed whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                            {step.split(/(```[\s\S]*?```|`[^`\n]+`)/g).map((part, partIndex) => {
+                              if (part.match(/^```[\s\S]*?```$/)) {
+                                // Code block
+                                const code = part.replace(/```[\w]*\n?/g, '').trim();
+                                return (
+                                  <code key={partIndex} className="block mt-2 mb-2 p-3 bg-gray-900 text-emerald-300 rounded border border-emerald-600 font-mono text-sm whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                    {code}
+                                  </code>
+                                );
+                              } else if (part.match(/^`[^`\n]+`$/)) {
+                                // Inline command
+                                const cmd = part.replace(/`/g, '');
+                                return (
+                                  <code key={partIndex} className="px-2 py-1 bg-gray-900 text-blue-300 rounded border border-blue-600 text-sm font-mono break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                    {cmd}
+                                  </code>
+                                );
+                              } else {
+                                return <span key={partIndex} className="break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{part}</span>;
+                              }
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : interviewMode === "procedural" ? (
+                // Procedural mode but no steps yet
+                <div className="bg-gray-800 p-6 rounded-lg border-2 border-gray-600 text-center">
+                  <p className="text-gray-400 italic">Ask a procedural question to see step-by-step process...</p>
+                </div>
+              ) : (
+                // Q&A mode: Scrolling text display
+                <ScrollingTextDisplay 
+                  fullText={scrollingPrompt || fullResponse} 
+                  readingSpeed={readingSpeed}
+                  onScrollingStart={handleScrollingStart}
+                />
+              )}
+              {fullResponse && interviewMode === "qa" && (
                 <div className="mt-3 flex justify-end">
                   <button
                     onClick={generateDeeperAnswer}
@@ -1339,7 +1914,19 @@ const App: React.FC = () => {
               {/* Moved below the scrolling text: Status and Your Question */}
               <div className="mt-4 space-y-4">
                 <div className="bg-gray-600 p-3 rounded-lg shadow-inner">
-                  <p className="text-sm font-medium text-gray-300">Current Status:</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-300">Current Status:</p>
+                    {(isTimerRunning || responseTime !== null) && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">Response Time:</span>
+                        <span className={`font-mono text-sm font-semibold ${
+                          isTimerRunning ? "text-yellow-400 animate-pulse" : "text-green-400"
+                        }`}>
+                          {formatResponseTime(responseTime)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   <p
                     className={`font-mono text-base ${
                       status.startsWith("Error") || status.includes("Failed")
@@ -1412,6 +1999,13 @@ const App: React.FC = () => {
                   className="px-4 py-2 rounded-md text-sm font-semibold bg-gray-600 hover:bg-gray-500 text-white shadow"
                 >
                   Clear Transcript
+                </button>
+                <button
+                  onClick={clearStoredResponses}
+                  className="px-4 py-2 rounded-md text-sm font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow"
+                  title={`Clear stored responses for current profile (Round ${interviewRound})`}
+                >
+                  Clear Stored Responses
                 </button>
                 {!isSessionRecording ? (
                   <button

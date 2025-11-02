@@ -1,0 +1,124 @@
+[
+  {
+    "id": "sans-incident-response",
+    "title": "SANS 6-Step Incident Response Process",
+    "summary": "A systematic approach to handling cybersecurity incidents through six distinct phases from preparation to lessons learned.",
+    "phases": [
+      {
+        "phase_number": 1,
+        "phase_name": "Preparation",
+        "description": "Preparation is the foundation of effective incident response. This phase involves establishing policies, procedures, and technical capabilities before an incident occurs. Key activities include developing incident response plans, defining roles and responsibilities, setting up communication channels, acquiring necessary tools and resources, conducting training and exercises, establishing legal and regulatory compliance frameworks, and creating relationships with external partners such as law enforcement, vendors, and other organizations. Preparation also involves implementing security controls, monitoring systems, and maintaining documentation. The goal is to ensure the organization is ready to detect, respond to, and recover from security incidents efficiently and effectively."
+      },
+      {
+        "phase_number": 2,
+        "phase_name": "Identification",
+        "description": "Identification involves detecting and determining whether an incident has occurred. This phase focuses on recognizing indicators of compromise (IoCs), analyzing alerts from security monitoring tools, investigating suspicious activities, and validating potential security events. Activities include monitoring security information and event management (SIEM) systems, reviewing logs and network traffic, analyzing endpoint detection and response (EDR) alerts, examining system and application anomalies, correlating multiple data sources, and determining the scope and severity of the incident. The identification phase requires rapid assessment to distinguish between false positives and actual security incidents, and it's critical to document findings, preserve evidence, and escalate appropriately."
+      },
+      {
+        "phase_number": 3,
+        "phase_name": "Containment",
+        "description": "Containment focuses on limiting the scope and impact of the incident to prevent further damage. This phase involves both short-term and long-term containment strategies. Short-term containment aims to quickly isolate affected systems, network segments, or user accounts to stop the immediate threat. This may include disconnecting systems from the network, disabling compromised accounts, blocking malicious IP addresses or domains, or shutting down affected services. Long-term containment involves implementing more permanent solutions while maintaining business operations, such as applying patches, updating security controls, or implementing additional monitoring. Throughout containment, it's essential to preserve evidence for forensic analysis, maintain communication with stakeholders, and balance security needs with business continuity requirements."
+      },
+      {
+        "phase_number": 4,
+        "phase_name": "Eradication",
+        "description": "Eradication involves completely removing the threat from the environment and eliminating all traces of the incident. This phase requires thorough investigation to identify all affected systems, compromised accounts, malware, backdoors, and other malicious artifacts. Key activities include removing malware and malicious code, closing security vulnerabilities through patching or configuration changes, eliminating unauthorized access points, cleaning infected systems, restoring systems from clean backups when necessary, and verifying that all threat components have been removed. Eradication must be comprehensive to prevent re-infection or persistence of the threat. It often involves coordination with IT operations, security teams, and potentially external experts. Documentation of all eradication activities is critical for ensuring complete removal and for future reference."
+      },
+      {
+        "phase_number": 5,
+        "phase_name": "Recovery",
+        "description": "Recovery focuses on restoring systems and services to normal operations while ensuring the threat has been eliminated and security has been improved. This phase involves carefully bringing systems back online, restoring data from clean backups if needed, verifying system integrity and functionality, monitoring for any signs of re-infection, and gradually resuming normal business operations. Recovery activities include rebuilding compromised systems, restoring data from backups, reconfiguring security controls, validating that systems are functioning correctly, conducting security testing, and gradually restoring services in a prioritized manner. The recovery phase requires careful planning to balance the need to restore operations quickly with the need to ensure security. Continuous monitoring during recovery is essential to detect any residual threats or issues."
+      },
+      {
+        "phase_number": 6,
+        "phase_name": "Lessons Learned",
+        "description": "Lessons Learned, also known as post-incident review, involves analyzing the incident response process to identify what went well, what could be improved, and what changes should be made to prevent similar incidents in the future. This phase includes conducting a thorough post-incident meeting with all involved parties, documenting the incident timeline, root cause analysis, response effectiveness, and outcomes. Key activities include reviewing incident response metrics such as detection time, containment time, and recovery time, identifying gaps in processes, tools, or capabilities, updating incident response plans and procedures, providing training based on lessons learned, improving security controls and monitoring, and sharing knowledge across the organization. The lessons learned phase is critical for continuous improvement and helps strengthen the organization's security posture and incident response capabilities for future incidents."
+      }
+    ]
+  },
+  {
+    "id": "sdlc-waterfall",
+    "title": "Software Development Lifecycle (SDLC) - Traditional/Waterfall",
+    "summary": "A linear, sequential software development methodology where each phase must be completed before moving to the next.",
+    "phases": [
+      {
+        "phase_number": 1,
+        "phase_name": "Planning",
+        "description": "Planning is the initial phase where project objectives, scope, resources, timeline, and feasibility are determined. This phase involves gathering requirements from stakeholders, defining project goals and success criteria, assessing technical and financial feasibility, creating project plans and schedules, allocating resources including team members, budget, and tools, identifying risks and constraints, establishing project governance and communication protocols, and obtaining necessary approvals. Key deliverables include project charter, scope statement, resource plan, schedule, budget estimates, and risk assessment. The planning phase sets the foundation for the entire project and requires thorough analysis to ensure project viability and alignment with business objectives. Effective planning helps prevent scope creep, budget overruns, and scheduling issues later in the project."
+      },
+      {
+        "phase_number": 2,
+        "phase_name": "Analysis",
+        "description": "Analysis involves gathering and documenting detailed requirements from stakeholders to understand what the software needs to accomplish. This phase focuses on understanding business needs, user requirements, functional requirements, non-functional requirements such as performance, security, and scalability, system constraints, integration points, and regulatory or compliance requirements. Activities include conducting stakeholder interviews, analyzing existing systems and processes, documenting use cases and user stories, creating requirement specifications, modeling business processes, identifying data requirements, and validating requirements with stakeholders. Key deliverables include requirements specification document, use case diagrams, data flow diagrams, and requirement traceability matrix. The analysis phase is critical for ensuring the development team understands exactly what needs to be built, reducing the risk of misunderstandings and costly changes later in the project."
+      },
+      {
+        "phase_number": 3,
+        "phase_name": "Design",
+        "description": "Design involves creating detailed technical specifications and architecture for how the software will be built. This phase translates requirements into technical blueprints that developers can follow. Activities include system architecture design, database schema design, user interface and user experience design, API design, security architecture, infrastructure design, integration design, and creating detailed technical specifications. Design documentation includes architecture diagrams, database models, interface mockups, API specifications, security controls, deployment architecture, and component-level design documents. The design phase establishes the technical foundation and ensures consistency across the development team. Good design considers scalability, maintainability, security, performance, and usability. The design must be reviewed and approved before proceeding to implementation to ensure it meets requirements and follows best practices."
+      },
+      {
+        "phase_number": 4,
+        "phase_name": "Implementation",
+        "description": "Implementation, also known as development or coding, involves writing the actual code based on the design specifications. This phase involves setting up development environments, writing code according to design specifications, implementing unit tests, conducting code reviews, following coding standards and best practices, managing source code using version control systems, integrating components, and documenting code. Developers work to build features, integrate with databases and external systems, implement security controls, create user interfaces, and ensure code quality. Key activities include writing clean, maintainable code, implementing error handling and logging, conducting peer code reviews, performing unit testing, integrating with third-party libraries and APIs, and maintaining technical documentation. Implementation requires coordination among team members, adherence to coding standards, and regular testing to catch issues early."
+      },
+      {
+        "phase_number": 5,
+        "phase_name": "Testing",
+        "description": "Testing involves systematically verifying that the software meets requirements, functions correctly, and is free of defects. This phase includes multiple levels of testing including unit testing, integration testing, system testing, user acceptance testing, performance testing, security testing, and regression testing. Activities include creating test plans and test cases, executing tests, identifying and documenting defects, retesting fixes, validating that requirements are met, testing in environments that mirror production, conducting automated and manual testing, and preparing test reports. The testing phase ensures quality, reliability, and usability of the software. Different types of testing verify functionality, performance, security, compatibility, and usability. Testing should be comprehensive and cover both positive and negative scenarios. All identified defects must be fixed and retested before the software can proceed to deployment."
+      },
+      {
+        "phase_number": 6,
+        "phase_name": "Deployment",
+        "description": "Deployment involves releasing the software to production and making it available to end users. This phase includes preparing the production environment, deploying the application, configuring systems and databases, migrating data if necessary, setting up monitoring and logging, conducting final verification, and providing user training and documentation. Key activities include creating deployment plans, preparing deployment scripts, backing up existing systems, deploying application code and database changes, configuring production settings, performing smoke tests, monitoring system health, and providing support during the initial rollout. Deployment may be done through various strategies such as big bang deployment, phased rollout, or blue-green deployment. It's critical to have rollback plans in case of issues. Post-deployment monitoring helps identify any immediate issues that need to be addressed."
+      },
+      {
+        "phase_number": 7,
+        "phase_name": "Maintenance",
+        "description": "Maintenance involves ongoing support, updates, and improvements to the software after it has been deployed. This phase includes fixing bugs discovered in production, applying security patches, implementing enhancements and new features, optimizing performance, updating documentation, providing user support, monitoring system health, and planning for future versions. Maintenance activities include responding to user-reported issues, analyzing and fixing defects, implementing requested enhancements, applying security updates, optimizing database queries and application performance, updating dependencies, and planning for system upgrades. Maintenance ensures the software continues to meet user needs, remains secure, performs well, and evolves with changing requirements. This phase continues throughout the software's lifecycle until it is retired or replaced."
+      }
+    ]
+  },
+  {
+    "id": "nist-rmf",
+    "title": "Risk Management Framework (RMF) - NIST 7-Steps",
+    "summary": "A comprehensive framework for managing security and privacy risks in information systems through seven systematic steps.",
+    "phases": [
+      {
+        "phase_number": 1,
+        "phase_name": "Prepare",
+        "description": "Prepare establishes the foundation for risk management activities by creating organizational context and readiness. This phase involves establishing organizational risk management strategy, defining roles and responsibilities for risk management, identifying common controls and inheritance strategies, developing risk management policies and procedures, establishing governance structures, identifying information system boundaries and authorizing officials, and preparing for the RMF process. Key activities include documenting organizational risk tolerance, establishing risk management roles such as system owners, information system security officers, and authorizing officials, identifying and documenting common controls that can be inherited, creating risk management policies and procedures, and ensuring organizational readiness to execute the RMF. Preparation ensures all stakeholders understand their roles and that the organization has the necessary policies, procedures, and resources to effectively manage risk."
+      },
+      {
+        "phase_number": 2,
+        "phase_name": "Categorize",
+        "description": "Categorize involves classifying information systems based on the potential impact of a security breach on confidentiality, integrity, and availability. This phase uses the FIPS 199 categorization process to assign impact levels of low, moderate, or high for each security objective. Activities include identifying information types processed, stored, and transmitted by the system, determining the potential impact of unauthorized disclosure, modification, or loss of availability, documenting the security categorization, developing the system security plan, and obtaining approval from the authorizing official. The categorization process considers the sensitivity of information, the criticality of system functions, and the potential consequences of security incidents. The security categorization determines the baseline security controls and provides the foundation for security control selection. Documentation includes the system security categorization and the rationale for the categorization decisions."
+      },
+      {
+        "phase_number": 3,
+        "phase_name": "Select",
+        "description": "Select involves choosing appropriate security controls to protect information systems based on the security categorization and risk assessment. This phase uses NIST SP 800-53 security controls and involves identifying baseline controls from the appropriate control baseline, selecting additional controls based on risk assessment, identifying common controls that can be inherited, tailoring controls to organizational needs, supplementing controls with organization-specific or system-specific controls, and documenting control selections and rationale. Activities include reviewing control baselines, assessing control applicability, determining control inheritance, identifying compensating controls when necessary, and documenting all control selections in the system security plan. The selection process considers threats, vulnerabilities, operational requirements, and organizational risk tolerance. Selected controls must be documented with their implementation approach and any tailoring or supplementation decisions."
+      },
+      {
+        "phase_number": 4,
+        "phase_name": "Implement",
+        "description": "Implement involves deploying security controls and documenting their implementation in the system security plan. This phase focuses on putting controls into operation according to their specifications and documentation. Activities include deploying security control implementations, configuring systems according to security requirements, implementing technical controls such as access controls and encryption, implementing administrative controls such as policies and procedures, implementing physical controls such as facility access controls, documenting control implementations in the system security plan, and ensuring controls are operating as intended. Implementation requires coordination among various organizational roles including system administrators, security engineers, system owners, and common control providers. Controls must be implemented according to their specifications and must be properly documented. The implementation phase also involves configuring security tools, establishing security monitoring, and ensuring proper integration of controls."
+      },
+      {
+        "phase_number": 5,
+        "phase_name": "Assess",
+        "description": "Assess involves evaluating security controls to determine their effectiveness in meeting security requirements. This phase includes developing assessment plans, conducting control assessments, analyzing assessment results, developing remediation plans for identified weaknesses, and documenting assessment findings. Activities include developing security assessment plans that specify assessment methods and procedures, conducting assessments using methods such as testing, examining, and interviewing, analyzing assessment results to determine control effectiveness, identifying security control weaknesses and deficiencies, developing plans of action and milestones (POA&Ms) to address weaknesses, and documenting all assessment findings. Assessment methods include testing technical controls, examining documentation and configurations, and interviewing personnel. The assessment determines whether controls are implemented correctly, operating as intended, and producing the desired outcomes. Assessment results inform the authorization decision and help identify areas for improvement."
+      },
+      {
+        "phase_number": 6,
+        "phase_name": "Authorize",
+        "description": "Authorize involves the formal decision by an authorizing official to accept the risk of operating an information system. This phase includes preparing the authorization package, reviewing risk information, making authorization decisions, and documenting authorization decisions. Activities include compiling the authorization package containing system security plan, security assessment report, and plan of action and milestones, conducting risk determination to assess overall system risk, reviewing risk information and making authorization decisions, issuing authorization decision documents, and establishing continuous monitoring strategies. The authorization decision is based on risk assessment, security control effectiveness, residual risk, and organizational risk tolerance. Authorizing officials may authorize system operation, authorize system operation with conditions, or deny authorization. Authorization decisions are documented and include risk acceptance rationale. Authorizations are typically time-limited and require periodic reauthorization."
+      },
+      {
+        "phase_number": 7,
+        "phase_name": "Monitor",
+        "description": "Monitor involves ongoing assessment of security controls and system changes to maintain security posture and support reauthorization. This phase includes continuous monitoring of security controls, tracking changes to the system, assessing security impacts of changes, updating security documentation, reporting security status, and responding to security events. Activities include implementing continuous monitoring strategies, monitoring security control effectiveness, tracking system changes and security impacts, updating the system security plan to reflect changes, conducting ongoing security assessments, reporting security status to authorizing officials, managing and tracking POA&Ms, and responding to security incidents. Continuous monitoring ensures that security controls remain effective as systems evolve and threats change. Monitoring activities include vulnerability scanning, security event monitoring, configuration management, and periodic security assessments. The monitoring phase supports ongoing risk management and provides information for reauthorization decisions."
+      }
+    ]
+  }
+]
+

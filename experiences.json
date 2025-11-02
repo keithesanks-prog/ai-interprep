@@ -1,0 +1,333 @@
+[
+  {
+    "id": 1,
+    "title": "Anti-Ship Missile Defense Leadership",
+    "company": "Navy/DoD",
+    "situation": "On the USS Vandegrift, our team was responsible for the anti-ship missile defense system, a critical first line of defense against highly destructive threats. My role was to continuously monitor for potential attacks during combat exercises with simulated nation-state adversaries.",
+    "task": "My primary responsibility was to protect the vessel and its crew by intercepting any inbound munitions. Due to the high-consequence nature of this task, I was given a high degree of explicit authority to engage countermeasures on my own judgment, without waiting for final approval from a superior officer.",
+    "action": "I established a strict personal protocol to ensure I was fully alert and responsive, consistently verifying all incoming data and maintaining a calm, focused mindset. Upon identifying a simulated threat, I would immediately and decisively deploy our countermeasures to neutralize it. At the precise moment of engagement, I would simultaneously send a real-time notification to my commanding officer to ensure leadership had immediate situational awareness.",
+    "result": "Through rigorous training and adherence to my protocol, I successfully defended the ship during every combat exercise. This demonstrated my ability to operate with a high level of autonomy and integrity under extreme pressure, ensuring the safety of the crew and the mission's success.",
+    "description": "Led anti-ship missile defense operations with autonomous decision-making authority during combat exercises"
+  },
+  {
+    "id": 2,
+    "title": "Preventative Maintenance Program Management",
+    "company": "Navy/DoD",
+    "situation": "While onboard the USS Vandegrift, I was responsible for the comprehensive preventative maintenance program for our anti-ship defense systems, which included our munitions, launchers, and monitoring antennas. This role required strict adherence to the Navy's 3M (Maintenance and Material Management) system.",
+    "task": "My core responsibility was to ensure our systems were not only operational but maintained to the highest standard of readiness. This involved a continuous cycle of preventative maintenance and meticulous administrative documentation. A key part of my job was to manage large-scale procedural updates, known as 'force revisions,' and ensure all administrative documentation was updated and approved by senior leadership.",
+    "action": "I developed and implemented a proactive schedule to audit our administrative documentation, anticipating upcoming force revisions rather than reacting to them. I also collaborated directly with my senior leadership to streamline the approval process for new maintenance procedures. My team and I focused on an intensive training regimen for ourselves, with a particular emphasis on the standards and expectations of the semi-annual maintenance inspections conducted by external inspectors.",
+    "result": "Through these efforts, my team and I successfully improved our maintenance scoring by a remarkable 30%. This not only allowed us to meet our compliance goals but also to rank among the highest-performing units in the entire Pacific Fleet during the inspections. We became an example of excellence in maintenance standards, ensuring our systems were always mission-ready.",
+    "description": "Managed comprehensive preventative maintenance program, improving maintenance scoring by 30%"
+  },
+  {
+    "id": 3,
+    "title": "Data Analysis, Compliance, and Stakeholder Reporting",
+    "company": "Navy/DoD",
+    "situation": "While stationed in a sensitive intelligence unit, my primary role was in signals intelligence and target development. I was responsible for investigating and tracking global activities that posed a threat to national security, such as munitions transfers and human trafficking.",
+    "task": "My core task was to transform raw, unstructured data into actionable intelligence. This involved developing detailed behavioral profiles on individuals and entities and identifying patterns to inform strategic decisions. A critical aspect of my job was to report my findings directly to the State Department and the broader intelligence community, ensuring they had real-time situational awareness of global threats.",
+    "action": "To conduct these investigations, I was required to navigate complex, non-human-readable databases and perform highly specific queries to extract critical information. I strictly adhered to a rigorous compliance framework, which mandated that I provide a clear, detailed justification for every query to ensure the highest standards of data governance and security were met. This disciplined approach was essential for maintaining the integrity and legality of our operations.",
+    "result": "Through my meticulous data analysis and unwavering commitment to compliance, I provided the intelligence community with unprecedented visibility into countries aggressively circumventing U.S. sanctions. My work was instrumental in tracking the movement of specific cargo, exposing the tactics they used—including renaming the cargo to avoid detection—and mapping the global routes they would traverse. This provided the State Department with a comprehensive understanding of these clandestine activities, directly contributing to high-level strategic decisions. For my contributions, I was awarded the Joint Service Achievement Medal.",
+    "description": "Transformed raw data into actionable intelligence for State Department and intelligence community, awarded Joint Service Achievement Medal"
+  },
+  {
+    "id": 4,
+    "title": "Network Topology and Asset Inventory Creation",
+    "company": "LA Care",
+    "situation": "When I joined the team at LA Care, I quickly realized that one of the biggest gaps in our operational visibility was the lack of a comprehensive asset inventory and network topology. I specifically asked for a network map or infrastructure diagram — something that would show me the layout of subnets, key systems, and how everything was interconnected. What I received was extremely limited — a static diagram that covered maybe 10% of the actual environment.",
+    "task": "I needed to build comprehensive visibility into the network infrastructure and asset inventory to improve security operations and detection capabilities.",
+    "action": "After asking multiple times without success, I took the initiative to build my own. I leveraged log data from the SIEM — pulling IP-to-host mappings, subnet usage, device types, and authentication flows. I mapped all of it in a structured spreadsheet, essentially creating a logical topology and asset matrix that helped me identify servers, workstations, and endpoints across different environments.",
+    "result": "Visualizing the environment — even in something as basic as a spreadsheet or Visio — drastically improved my ability to detect anomalies, understand log context, and even identify undocumented assets. That experience is why I now advocate for SIEM and security platforms that support infrastructure-aware dashboards — including network topology overlays, asset relationship mapping, and geographic or logical heat maps. Tools like Splunk's Enterprise Security, Microsoft Sentinel, or even Zeek visualizations can show data flows between devices, risky segments, and critical assets. These kinds of views reduce blind spots, accelerate onboarding for new analysts, and allow teams to proactively identify misconfigurations and shadow IT before they become incidents.",
+    "description": "Built comprehensive network topology and asset inventory from SIEM logs to improve security operations visibility"
+  },
+  {
+    "id": 5,
+    "title": "SIEM Vendor Management and Log Ingestion Optimization",
+    "company": "LA Care",
+    "situation": "At LA Care, one of my responsibilities was managing vendor relationships — particularly around our SIEM platform. I regularly reached out to vendor engineers for insight into the backend configuration, access limitations, or product-specific tuning we couldn't resolve internally. These engagements often involved remote sessions or scheduled working sessions to help us better understand how logs were being ingested and parsed.",
+    "task": "One of the recurring challenges we faced was that the SIEM had a daily ingestion cap of around 55 million logs, and we were hitting that limit frequently. That meant some logs were being generated but not ingested — creating critical visibility gaps.",
+    "action": "I dug into the admin console and discovered that several domain controllers were redundantly forwarding identical logs, effectively duplicating ingestion volume. I recommended a change to consolidate those feeds so only one authoritative domain controller forwarded those logs, while the others were filtered out.",
+    "result": "This optimization reduced unnecessary log volume significantly and freed up bandwidth within the ingestion limit. As a result, we were able to onboard additional log sources that previously weren't visible in the SIEM — which led to better coverage, improved correlation, and faster identification of critical issues like misconfigured service accounts and previously undetected lateral movement attempts. That experience taught me how important it is not just to collect logs, but to tune and prioritize log fidelity over log quantity — especially when working with ingestion-constrained SIEM platforms.",
+    "description": "Optimized SIEM log ingestion by eliminating duplicate domain controller logs, enabling additional log source onboarding"
+  },
+  {
+    "id": 6,
+    "title": "Enterprise TLS 1.0 to TLS 1.2 Upgrade",
+    "company": "LA Care",
+    "situation": "During my time at LA Care, I discovered through Qualys scans that every device on the network was still using TLS 1.0, which posed a serious security risk and compliance concern. I brought this up during a morning security team meeting, and it became clear that most of the team wasn't aware. I shared screen captures from Qualys, showing that multiple systems — across different segments — were flagged for deprecated TLS usage.",
+    "task": "One team member recalled that there had been a conversation back in 2018 about upgrading to TLS 1.2, but due to organizational turnover, that initiative had been dropped. After presenting the risk and gaining buy-in, I was tasked with leading the enterprise-wide upgrade to TLS 1.2.",
+    "action": "Recognizing that there could be application dependencies or service disruptions tied to TLS 1.0, I proposed and implemented a phased rollout plan. I worked with department heads to identify a sample set of systems from each unit that could be used for early testing. I clearly communicated that any issues should be reported directly to me, and I made myself readily available to troubleshoot immediately.",
+    "result": "This structured and collaborative approach allowed us to validate compatibility in real-time, identify edge cases early, and build confidence across business units. Ultimately, we were able to phase out TLS 1.0 without any unplanned outages, improving LA Care's security posture and compliance alignment without disrupting operations. That project showed me how important it is to combine technical awareness with stakeholder engagement, especially when remediating systemic legacy risks.",
+    "description": "Led enterprise-wide TLS 1.0 to TLS 1.2 upgrade with zero outages, improving security posture and compliance"
+  },
+  {
+    "id": 7,
+    "title": "Business Email Compromise (BEC) Investigation",
+    "company": "LA Care",
+    "situation": "While at LA Care, a few employees received an email containing an invoice from what appeared to be a contracted partner requesting payment for services. Initially, the recipients forwarded the email to the billing department to handle as a standard invoice. However, the email eventually reached the security team for review — and I was assigned to investigate the legitimacy of the communication.",
+    "task": "I needed to determine if this was a legitimate invoice or a potential business email compromise (BEC) attempt.",
+    "action": "I began by scanning the email attachments for any embedded malware or indicators of compromise. While the files were clean from a malware standpoint, I decided to manually inspect the invoices for any inconsistencies. As I reviewed the document, I noticed several red flags, including discrepancies in contact information and subtle formatting issues. To validate the sender, I cross-referenced the contact details on the invoice with those listed on the official website of the claimed partner organization. I discovered that the names were real, but the email address and phone numbers did not match — strongly suggesting this could be a business email compromise (BEC) attempt. I also found other anomalies, such as mismatched headers, non-standard language in the invoice, and minor branding inconsistencies that would typically go unnoticed. Using the SIEM, I searched for log data to identify how many employees had received or interacted with the email, and whether it had proliferated through internal forwarding.",
+    "result": "I compiled a full timeline of events — from the original delivery to internal distribution — and highlighted each discrepancy with supporting evidence. I submitted the findings in a report to senior security leadership and legal/compliance stakeholders for further action. This resulted in coordinated outreach to the partner organization for verification, and a company-wide advisory to reinforce caution when handling vendor invoices and payment requests. The investigation helped prevent a potential financial loss, and the process led to updated internal procedures for validating vendor payment requests before forwarding or processing.",
+    "description": "Investigated potential BEC attempt, prevented financial loss, and updated vendor validation procedures"
+  },
+  {
+    "id": 8,
+    "title": "Leadership Email Investigation and Professional Response",
+    "company": "LA Care",
+    "situation": "While working at LA Care, the President of the organization received a highly distressing email from an unknown external sender. The nature of the message raised concerns about whether the individual was a current or former employee, and the security team was tasked with investigating the origin and any potential internal connection.",
+    "task": "I was assigned to this task along with another colleague. Since neither of us reported to each other, we typically coordinated on equal footing or based on direction from leadership. I reached out to the colleague to align on how we might divide or approach the investigation.",
+    "action": "To my surprise, he made it clear that he had no interest in working on the issue. He stated that, in his view, the task wasn't worth prioritizing simply because it made the CEO uncomfortable — that it didn't warrant a technical investigation. I didn't engage in disagreement, but I was concerned about the situation — especially because this was a sensitive issue involving the highest levels of leadership. I brought the matter to my supervisor, not as a complaint, but to ask for guidance, since I wasn't sure how to proceed with an uncooperative peer on something with potential reputational or personnel impact. After that conversation, I continued the investigation on my own. I reviewed the email headers, investigated the sender domain and IPs, and searched our internal systems to see if there was any association with former employees, vendors, or previous incidents.",
+    "result": "Even though it turned out not to be a direct security threat, the incident underscored for me that not every investigation is about malware or data breaches — some are about protecting leadership and maintaining trust within the organization. I treated it as seriously as I would a technical compromise because sometimes, the intent or perception behind a message is just as critical as the payload.",
+    "description": "Independently investigated sensitive email to organization president, demonstrating professional handling of leadership concerns"
+  },
+  {
+    "id": 9,
+    "title": "Vendor Selection and Technical Due Diligence",
+    "company": "LA Care",
+    "situation": "Toward the end of LA Care's contract with the current SIEM vendor, our team began evaluating alternatives for a new SIEM platform. I was actively involved in the vendor selection and application onboarding process, which meant scheduling discovery meetings, reviewing documentation, and comparing features, scalability, and integration potential.",
+    "task": "I quickly found that many of the vendor reps I was speaking with — especially those from the sales side — weren't equipped to handle deeper technical questions, particularly around detection logic customization, ingestion limits, normalization pipelines, or how their system handled multi-tenant environments.",
+    "action": "In nearly every meeting, I'd ask foundational questions about how the product handled specific log types, correlated events, or managed storage retention under heavy volume. The reps would usually respond with something like, 'That's a really great question,' — and I'd think to myself, Yeah, I know — that's why I asked it. In practice, those questions consistently led to them bringing in more technical SMEs for follow-up sessions. It became clear that getting a complete picture of any platform required persistence, asking the right questions early, and being prepared to challenge vague or overly simplified answers.",
+    "result": "That process taught me how important it is to go beyond the pitch deck and test whether a solution can truly support the needs of a security team — not just in terms of flashy dashboards, but in actual detection logic, scalability, and integration support. It also reinforced that vendor relationships need to be technical partnerships, not just transactions.",
+    "description": "Conducted technical due diligence for SIEM vendor selection, ensuring technical fit beyond sales pitches"
+  },
+  {
+    "id": 10,
+    "title": "Independent Security Assessment and Cross-Functional Remediation",
+    "company": "LA Care",
+    "situation": "At LA Care, I was brought in and given direct access to key applications and security tools with the directive to independently assess and improve the security posture. There was no formal onboarding or predefined checklist — I was expected to dive in, identify problems, and resolve them through cross-functional coordination.",
+    "task": "Through hands-on investigation, I discovered multiple operational and security concerns, including: scheduled tasks running with unnecessary root-level privileges, outdated servers that were still beaconing outbound despite serving no functional purpose, and excessive and unnecessary network traffic from legacy misconfigurations. These issues were not just security liabilities — they also contributed to unnecessary network load, reducing visibility into more critical daily operations.",
+    "action": "To resolve these challenges, I: documented each issue clearly and opened detailed Jira tickets, tagged the appropriate operational team and included department leadership and required approvers, in line with LA Care's separation of duties policy (security did not directly administer systems), and provided step-by-step remediation guidance in the ticket so the responsible teams could act quickly and confidently.",
+    "result": "This workflow allowed me to reduce noise and improve focus on meaningful logs and alerts, enabling faster detection of real threats. It also helped foster a collaborative security culture where operational teams had the clarity and backing to fix systemic issues quickly.",
+    "description": "Identified and remediated security misconfigurations through cross-functional collaboration using Jira workflow"
+  },
+  {
+    "id": 11,
+    "title": "Critical Server Incident Resolution and Vendor Coordination",
+    "company": "LA Care",
+    "situation": "At LA Care, I was involved in resolving a significant issue affecting one of our critical servers. The incident required escalation through our Microsoft support contract, and we coordinated a late-night troubleshooting session that lasted until around 2:00 AM.",
+    "task": "The session included about five members from LA Care — primarily from the IT department, along with my direct supervisor — and Microsoft engineers. We collectively reviewed system event logs, examined potential root causes, and worked through multiple layers of diagnostics.",
+    "action": "During the Microsoft team's shift turnover, I stayed on the Teams meeting to maintain continuity, ensuring no context was lost and that our progress continued with the new support engineers. While this was a collaborative effort, I played a key role in keeping the investigation focused, documenting findings, and bridging communication between LA Care stakeholders and the vendor team.",
+    "result": "The experience reinforced for me how critical coordination, persistence, and clear communication are when resolving high-stakes technical issues — especially when downtime or missteps can impact business operations or regulatory compliance.",
+    "description": "Coordinated late-night critical server recovery with Microsoft, maintaining continuity through shift turnover"
+  },
+  {
+    "id": 12,
+    "title": "SIEM White Paper for Air-Gapped DoD Environment",
+    "company": "Jacobs/NISSC II",
+    "situation": "As part of my responsibilities on the NISSC II (NORAD and USNORTHCOM IT Support) contract, as the Security Measures Architect I was tasked with authoring a technical white paper exploring the implementation of a log management and SIEM solution within a highly secure, air-gapped DoD environment.",
+    "task": "The white paper served as both a feasibility study and a foundational proposal. I needed to conduct a detailed analysis of the operational environment, identifying logging requirements, data flow constraints, and SIEM integration challenges specific to on-premise, disconnected (air-gapped) architectures.",
+    "action": "I mapped SIEM capabilities to relevant NIST 800-53 controls, identifying how an appropriately configured platform could support controls related to AU-6 (Audit Review, Analysis, and Reporting), SI-4 (System Monitoring), and IR-5 (Incident Monitoring). This alignment helped demonstrate how a SIEM could become a compliance enabler as well as a technical security solution. I also conducted a cost and capabilities comparison of three vendor SIEM solutions that met both DoD security standards and deployment constraints. Special attention was paid to licensing models, log ingestion limits, scalability in an offline network, and system resource requirements.",
+    "result": "The final deliverable was used to inform leadership and acquisition teams, and served as part of a broader decision-making process around tool selection and RMF implementation under NISSC II.",
+    "description": "Authored technical white paper on SIEM feasibility in air-gapped DoD environments, mapping to NIST 800-53 controls"
+  },
+  {
+    "id": 13,
+    "title": "SIEM Deployment Strategy and $30M Contract Award",
+    "company": "Jacobs/NISSC II",
+    "situation": "In support of the NISSC II contract, I was responsible not only for drafting a comprehensive technical white paper on potential SIEM solutions but also for preparing and delivering the accompanying technical presentation that was used to brief stakeholders and decision-makers.",
+    "task": "I needed to develop a deployment strategy that would integrate the SIEM into the existing infrastructure without disrupting mission-critical operations in an air-gapped DoD environment.",
+    "action": "The presentation included a visual overview of the network topology, with emphasis on segments that would be directly impacted by the SIEM integration. I proposed a deployment strategy leveraging the existing Gigamon network traffic visibility infrastructure, which was already implemented across fiber-optic links in the air-gapped environment. As part of the integration plan, we proposed a 30/70 optical split, ensuring that 70% of traffic continued to support the operational mission uninterrupted, while 30% was routed to the SIEM for monitoring and analysis. This configuration was validated through testing, which confirmed that the traffic split did not negatively impact mission performance. I included a detailed comparison of three SIEM vendors, evaluating them based on: on-premise deployment capability in air-gapped environments, licensing models and ingestion limits, NIST 800-53 control alignment (AU, SI, IR families), and cost-effectiveness and scalability.",
+    "result": "Based on both technical and operational considerations, I recommended Splunk as the preferred platform. Our team's recommendation was ultimately accepted by the client, contributing directly to the award of a $30 million contract.",
+    "description": "Developed SIEM deployment strategy with 30/70 optical split, contributing to $30M contract award"
+  },
+  {
+    "id": 14,
+    "title": "RMF Control Implementation and Compliance Documentation",
+    "company": "Jacobs/NISSC II",
+    "situation": "As part of the RMF process for the NISSC II contract, I supported the network security team's control implementation and documentation efforts. My focus was on aligning the department's technical configurations and processes with the relevant NIST SP 800-53 control families, particularly in support of system accreditation. The program's RMF accreditation was approaching review with several open POA&Ms and incomplete control documentation.",
+    "task": "I worked directly within the RMF system to select applicable controls (e.g., AC-17, AU-6, SI-4, etc.), and entered implementation statements describing how Jacobs' solutions and processes met each control requirement. This included both the primary controls and their enhancements, based on the assigned baseline. I was responsible for helping the team achieve compliance and prepare for assessment.",
+    "action": "Recognizing the need for better visibility across control families, I took the initiative to create a comprehensive spreadsheet that mapped: all relevant control families and individual control IDs, the specific implementation mechanisms Jacobs had in place to satisfy each control, and associated systems, teams, or processes responsible for control execution. I authored detailed control implementation statements, supplied technical evidence for control families (AC, AU, IR, SI), and coordinated mitigation of open findings.",
+    "result": "This spreadsheet became a working reference for both engineering and compliance teams, allowing them to quickly track control status, ownership, and gaps. It also supported internal reviews and helped streamline future updates to the System Security Plan (SSP). Twelve critical findings were remediated ahead of schedule, exceeding audit thresholds and contributing to successful system accreditation.",
+    "description": "Mapped NIST 800-53 controls, remediated 12 critical findings, contributing to successful system accreditation"
+  },
+  {
+    "id": 15,
+    "title": "Mission-Critical System Operations in High-Stakes Environment",
+    "company": "Jacobs/NISSC II",
+    "situation": "One of the most challenging aspects of our work on the NISSC II contract was supporting a real-time, mission-critical network system operated by NORAD and the U.S. Space Force. The system was directly responsible for monitoring foreign ICBM activity and space-based threats, making it essential to national defense and global threat awareness.",
+    "task": "Because of this, any system downtime had direct implications for national visibility into high-priority threats, including missile launches and global positioning events. Although the system was designed with redundancy and automatic failover, even scheduled maintenance required strict coordination with Space Force leadership and could only be performed when geopolitical tensions were low.",
+    "action": "In practice, this meant that we often had approved implementation windows revoked with little notice due to shifting international events or intelligence priorities. While we had detailed deployment plans, our work was considered non-critical compared to active monitoring, so it was frequently deferred. I learned to balance technical readiness with operational diplomacy — preparing every aspect of deployment thoroughly, while remaining flexible and responsive to the broader mission.",
+    "result": "This experience taught me the importance of building solutions that are resilient, minimally disruptive, and security-enhancing without compromising availability in real-time defense environments. It reinforced the need to maintain constant technical readiness while remaining adaptable to changing mission priorities.",
+    "description": "Supported mission-critical NORAD/Space Force ICBM monitoring system with zero downtime requirements"
+  },
+  {
+    "id": 16,
+    "title": "Implemented Foundational Security Controls for 8+ SMB and E-commerce Clients",
+    "company": "Axios Consulting",
+    "situation": "When I joined Axios Consulting, several small business and e-commerce clients lacked consistent external defenses—most had exposed admin panels, unencrypted data paths, and unpatched firewalls.",
+    "task": "My goal was to standardize their perimeter defenses to meet essential compliance and risk-reduction baselines across multiple environments.",
+    "action": "I deployed web application firewalls (WAFs), enforced SSL/TLS certificates, hardened firewall policies, and implemented continuous scanning to identify and close exposure points. I also trained client admins on maintaining the configurations.",
+    "result": "Within one quarter, external vulnerability counts dropped by roughly 75%, dramatically reducing exploitable surfaces and improving client trust and audit readiness.",
+    "description": "Standardized perimeter security for 8+ SMB/e-commerce clients, reducing vulnerabilities by 75%"
+  },
+  {
+    "id": 17,
+    "title": "Hardened AWS Accounts through IAM, GuardDuty, and Monitoring",
+    "company": "Axios Consulting",
+    "situation": "Several client AWS accounts lacked visibility into identity use, permissions sprawl, and data access anomalies.",
+    "task": "I was tasked with enforcing least privilege and improving real-time detection across multi-account AWS environments.",
+    "action": "I reviewed IAM policies, implemented role-based access controls, triaged GuardDuty findings, and enabled CloudTrail and Config across all regions for immutable audit logs. I automated notifications for high-risk events.",
+    "result": "Unauthorized access paths decreased by ~60%, and audit teams gained full traceability, strengthening compliance and cloud posture scores.",
+    "description": "Hardened AWS accounts with IAM, GuardDuty, and monitoring, reducing unauthorized access by 60%"
+  },
+  {
+    "id": 18,
+    "title": "Built Risk-Based Vulnerability Management for AWS/GCP",
+    "company": "Axios Consulting",
+    "situation": "Clients had inconsistent patching practices and lacked visibility into vulnerability trends across AWS and GCP.",
+    "task": "I needed to unify and operationalize vulnerability management to focus on true risk rather than scan volume.",
+    "action": "I created scan baselines, standardized asset tagging, defined remediation SLAs by criticality, and produced executive dashboards to track compliance over time.",
+    "result": "On-time patch compliance rose to 92% across all managed systems, and vulnerability management evolved from reactive to risk-driven.",
+    "description": "Built risk-based vulnerability management program, achieving 92% on-time patch compliance"
+  },
+  {
+    "id": 19,
+    "title": "Authored Security Standards and Incident Runbooks for Multi-Cloud",
+    "company": "Axios Consulting",
+    "situation": "Each client handled incidents differently, leading to confusion and delayed containment during security events.",
+    "task": "My assignment was to formalize security response processes and documentation across all client environments.",
+    "action": "I authored cloud-specific security standards, incident playbooks, and escalation paths mapped to NIST and MITRE ATT&CK. I also ran tabletop simulations to validate workflows.",
+    "result": "Incident containment and notification times improved by ~30%, and clients gained repeatable, auditable IR procedures aligned with best practices.",
+    "description": "Created multi-cloud security standards and incident runbooks, improving containment times by 30%"
+  },
+  {
+    "id": 20,
+    "title": "Performed GCP Platform Risk Assessments and Mitigated Critical Issues",
+    "company": "Axios Consulting",
+    "situation": "A client expanding into Google Cloud lacked security baselines or telemetry visibility.",
+    "task": "I was responsible for assessing platform risk and identifying vulnerabilities before production rollout.",
+    "action": "Using SIEM telemetry, config reviews, and manual validation, I identified over 75 critical misconfigurations, including over-permissive service accounts and unencrypted storage. I worked with DevOps to remediate and harden configurations.",
+    "result": "All critical issues were mitigated pre-exploitation, enabling secure go-live and improved GCP audit readiness.",
+    "description": "Assessed GCP platform risk, identified and remediated 75+ critical misconfigurations before production"
+  },
+  {
+    "id": 21,
+    "title": "Advised on Data Protection, Privacy, and Spend Optimization",
+    "company": "Axios Consulting",
+    "situation": "Many clients were overspending on overlapping tools without clear linkage to actual risk reduction.",
+    "task": "I was tasked with aligning data protection efforts to measurable business risk while improving cost efficiency.",
+    "action": "I reviewed data flows, privacy safeguards, and tool utilization; identified redundant systems; and proposed a rationalized control set that met HIPAA and NIST objectives without unnecessary duplication.",
+    "result": "Security operating expenses were reduced by ~15%, while maintaining or improving compliance posture and resilience.",
+    "description": "Optimized security spend by 15% while maintaining compliance, aligning tools to measurable risk"
+  },
+  {
+    "id": 22,
+    "title": "Remediated 110+ Critical Azure Vulnerabilities at LA Care",
+    "company": "LA Care",
+    "situation": "When I joined LA Care, several Azure workloads handling PHI contained high-severity vulnerabilities that threatened HIPAA and HITRUST compliance.",
+    "task": "I was responsible for coordinating remediation across multiple system owners while tracking closure against regulatory SLAs.",
+    "action": "I built a centralized remediation tracker aligned to HITRUST control mappings, prioritized vulnerabilities by exploitability, and held weekly cross-team syncs to remove blockers.",
+    "result": "Within three months, 95% of all critical findings were remediated, restoring compliance for PHI systems and passing the next audit with no repeat findings.",
+    "description": "Remediated 110+ critical Azure vulnerabilities, achieving 95% closure rate and restoring HIPAA/HITRUST compliance"
+  },
+  {
+    "id": 23,
+    "title": "Tuned Splunk Correlation Searches to Raise Signal Fidelity",
+    "company": "LA Care",
+    "situation": "The SOC's Splunk instance generated excessive noise—analysts were drowning in false positives and missing real threats.",
+    "task": "I needed to refine detection logic to improve accuracy and shorten incident response cycles.",
+    "action": "I analyzed historical alert data, correlated false-positive patterns, rewrote correlation searches, and integrated refined playbooks into SOAR automation.",
+    "result": "Alert fidelity improved by ~40%, and mean-time-to-respond dropped proportionally, freeing analysts for proactive threat hunting.",
+    "description": "Tuned Splunk correlation searches, improving alert fidelity by 40% and reducing mean-time-to-respond"
+  },
+  {
+    "id": 24,
+    "title": "Audited CyberArk Configurations and Strengthened Privilege Controls",
+    "company": "LA Care",
+    "situation": "Credential vaulting and rotation policies were inconsistently applied across privileged accounts.",
+    "task": "My goal was to evaluate CyberArk configurations, identify weaknesses, and align to least-privilege principles.",
+    "action": "I performed a full audit of vault policies, rotation schedules, and role assignments; documented eight critical gaps; and implemented new access workflows.",
+    "result": "Lateral-movement risk was reduced significantly, and audit findings for privileged access were cleared in the next compliance review.",
+    "description": "Audited CyberArk configurations, documented 8 critical gaps, and reduced lateral-movement risk"
+  },
+  {
+    "id": 25,
+    "title": "Strengthened Endpoint Security through CrowdStrike Policy Tuning",
+    "company": "LA Care",
+    "situation": "Endpoint Detection & Response coverage was inconsistent, leaving blind spots across departments.",
+    "task": "I was tasked with normalizing and tuning CrowdStrike policies for behavioral detection.",
+    "action": "I reviewed telemetry gaps, deployed standardized policies, and validated coverage via internal test scenarios simulating real attacks.",
+    "result": "Analytic coverage reached ~98%, ensuring complete visibility for targeted behaviors and strengthening IR readiness.",
+    "description": "Tuned CrowdStrike policies, achieving 98% analytic coverage and strengthening IR readiness"
+  },
+  {
+    "id": 26,
+    "title": "Designed OSI-Model-Based Security Awareness Program",
+    "company": "LA Care",
+    "situation": "Phishing and user-driven compromises remained high despite annual training.",
+    "task": "I needed to develop a more memorable and technically grounded awareness initiative.",
+    "action": "I designed an OSI-layer-based curriculum linking each layer to human behaviors and social-engineering techniques, delivered through workshops for 50+ staff.",
+    "result": "Phishing click-through rates dropped by ~45% in six months, and participant engagement scores rose markedly.",
+    "description": "Created OSI-model-based security awareness program, reducing phishing click-through rates by 45%"
+  },
+  {
+    "id": 27,
+    "title": "Embedded Security into DevSecOps Delivery at Jacobs",
+    "company": "Jacobs/NISSC II",
+    "situation": "When I joined Jacobs, the engineering teams on the NISSC II contract were deploying new applications for NORAD and USNORTHCOM without consistent security validation at release.",
+    "task": "I was tasked with embedding security controls and incident response readiness into every new DevSecOps delivery.",
+    "action": "I defined acceptance criteria, integrated IR steps into CI/CD pipelines, and implemented release gates requiring security validation before promotion to production.",
+    "result": "100% of new deployments met security review standards, eliminating post-release vulnerabilities and reducing defect escapes in production.",
+    "description": "Embedded security into DevSecOps CI/CD pipelines, achieving 100% security validation for deployments"
+  },
+  {
+    "id": 28,
+    "title": "Mapped SIEM Detections to MITRE ATT&CK and Standardized Analytics",
+    "company": "Jacobs/NISSC II",
+    "situation": "The existing SIEM had detections developed ad hoc, without a unified framework or threat coverage map.",
+    "task": "I needed to improve visibility, standardize detection logic, and ensure traceability to adversary TTPs.",
+    "action": "I cataloged all detections, mapped them to ~80% of the MITRE ATT&CK matrix, and documented analytic coverage across control families.",
+    "result": "Teams gained a clear understanding of detection posture and used the matrix as the baseline for tuning and future analytics—standardizing SOC workflows and enabling faster threat correlation.",
+    "description": "Mapped SIEM detections to 80% of MITRE ATT&CK matrix, standardizing SOC workflows"
+  },
+  {
+    "id": 29,
+    "title": "Authored Targeted Splunk Detections and Reduced False Positives",
+    "company": "Jacobs/NISSC II",
+    "situation": "Analysts were inundated with low-fidelity Splunk alerts that wasted time and masked genuine threats.",
+    "task": "I needed to strengthen detection logic and reduce alert noise.",
+    "action": "I analyzed false-positive trends, rewrote correlation searches with refined thresholds, and developed logic-based filtering tied to asset and user context.",
+    "result": "False positives dropped by ~40%, enabling analysts to focus on high-fidelity incidents and improving investigation throughput across the SOC.",
+    "description": "Authored targeted Splunk detections, reducing false positives by 40% and improving SOC throughput"
+  },
+  {
+    "id": 30,
+    "title": "Authored and Deployed 7 Custom Snort Signatures from Threat Intel",
+    "company": "Booz Allen Hamilton",
+    "situation": "While supporting a DoD network defense program, our intrusion detection system lacked coverage against several newly identified adversary tactics reported by intelligence partners.",
+    "task": "I was assigned to translate raw threat intelligence into actionable network detections.",
+    "action": "I analyzed adversary TTPs, extracted relevant packet structures, and wrote seven custom Snort signatures to identify those patterns. I validated each rule in a sandbox before deployment across 750+ distributed endpoints.",
+    "result": "The new signatures increased IDS efficacy, allowing early detection of adversary reconnaissance and lateral movement. The SOC began flagging threats previously invisible to standard vendor rules.",
+    "description": "Created 7 custom Snort signatures from threat intel, deployed across 750+ endpoints for enhanced IDS coverage"
+  },
+  {
+    "id": 31,
+    "title": "Managed Kubernetes Deployments for DoD DMSS Fly-Away Kits",
+    "company": "Booz Allen Hamilton",
+    "situation": "The Defense Mission Support System (DMSS) program deployed portable cyber kits to austere environments, but manual provisioning and rollbacks were slow and error-prone.",
+    "task": "I was tasked with automating application delivery to improve reliability in disconnected field conditions.",
+    "action": "I implemented Kubernetes-based orchestration to manage containerized applications, automated provisioning scripts, and built rollback workflows to recover from failed updates.",
+    "result": "Field deployment reliability improved by 30%, recovery time decreased by 50%, and mission teams could redeploy systems in minutes instead of hours.",
+    "description": "Automated Kubernetes deployments for DoD fly-away kits, improving reliability by 30% and reducing recovery time by 50%"
+  },
+  {
+    "id": 32,
+    "title": "Built ELK/Splunk Dashboards Accelerating SOC Investigations",
+    "company": "Booz Allen Hamilton",
+    "situation": "Analysts struggled to correlate events across systems because logs were siloed and lacked visual context.",
+    "task": "I needed to create dashboards that unified telemetry and gave analysts actionable insights.",
+    "action": "I integrated data from Splunk, ELK, and endpoint telemetry into contextual dashboards highlighting host activity, user behavior, and temporal correlations.",
+    "result": "Investigations that previously took an hour were completed in minutes—SOC throughput increased by over 15 cases per day, and incident narratives became more evidence-driven.",
+    "description": "Built unified ELK/Splunk dashboards, reducing investigation time from hours to minutes and increasing SOC throughput by 15+ cases/day"
+  },
+  {
+    "id": 33,
+    "title": "Integrated MITRE ATT&CK Techniques into IR Protocols",
+    "company": "Booz Allen Hamilton",
+    "situation": "Incident response playbooks were largely checklist-based and not aligned to any recognized adversary framework.",
+    "task": "I was responsible for strengthening cross-team consistency and analytic maturity.",
+    "action": "I mapped common attack scenarios to the MITRE ATT&CK framework, incorporated 10+ techniques into playbooks, and trained SOC and IR teams on using those mappings for containment and escalation.",
+    "result": "Response efforts became standardized across teams, improving containment coordination and enabling faster cross-functional hand-offs during high-severity events.",
+    "description": "Integrated MITRE ATT&CK techniques into IR playbooks, standardizing response across teams"
+  }
+]
+
