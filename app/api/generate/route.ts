@@ -138,6 +138,7 @@ export async function POST(request: Request) {
     const interviewMode = body?.interviewMode || "qa"; // "qa" or "procedural"
     const interviewRound = body?.interviewRound || 1; // Interview round (1-7)
     const profileId = body?.profileId || ""; // Profile ID for storing responses
+    const previousQA = body?.previousQA || null; // Previous question and response for building upon
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -242,7 +243,7 @@ export async function POST(request: Request) {
         retrievedContext = relevantExperiences.join("\n\n");
       } else {
         console.warn("⚠️  No experiences retrieved from RAG.");
-        retrievedContext = "No relevant experiences found in the database.";
+        retrievedContext = ""; // Empty context - Gemini will use general knowledge
       }
 
       // Retrieve technical Q&A from vector database
@@ -277,7 +278,10 @@ export async function POST(request: Request) {
       }
     } catch (error: any) {
       console.error("❌ Error retrieving experiences:", error.message);
-      retrievedContext = `Unable to retrieve experiences from database. Error: ${error.message}. Please ensure ingest.py has been run.`;
+      console.log("⚠️ ChromaDB not available - proceeding with general knowledge (no RAG context)");
+      // Set empty context so Gemini proceeds with general knowledge instead of error message
+      retrievedContext = "";
+      technicalQAContext = "";
     }
 
     const apiUrl = `${BASE_URL}${GEMINI_MODEL}:generateContent?key=${apiKey}`;
@@ -325,15 +329,44 @@ Step 2: Investigate specific findings - Navigate to AWS GuardDuty → Findings �
 Remember: Be SPECIFIC with commands, exact cloud service navigation paths, and specific tool locations. Avoid high-level descriptions.`;
     } else {
       // Q&A interview mode (default)
-      systemInstruction = `You are an expert AI interviewer. Use ONLY the following retrieved experience data and technical Q&A to answer the user's question.
+      // Build previous Q&A context section if available
+      const previousQASection = previousQA 
+        ? `**PREVIOUS QUESTION AND RESPONSE (BUILD UPON THIS):**
 
-**RETRIEVED CONTEXT:**
+**Previous Question:** ${previousQA.question}
+
+**Previous Response:** ${previousQA.response}
+
+**CRITICAL INSTRUCTION:** The user is asking a follow-up question that should build upon and expand the previous response. Your task is to:
+1. Acknowledge the previous response
+2. Provide MORE DETAILED and DEEPER explanations of the points mentioned in the previous response
+3. Expand on technical details, examples, or scenarios from the previous response
+4. Add additional context, examples, or practical applications
+5. Go deeper into the "how" and "why" aspects that were only briefly mentioned before
+
+The new question may ask for clarification, more detail, or expansion on specific aspects of the previous response. Treat it as an opportunity to provide a comprehensive, in-depth answer that builds directly on what was said before.
+
+---`
+
+        : "";
+
+      const contextSection = retrievedContext || technicalQAContext 
+        ? `**RETRIEVED CONTEXT:**
 
 ${retrievedContext}${technicalQAContext}
 
 **CRITICAL RULE:** Do not repeat the same story within the same conversation session. If the retrieved context is repetitive, synthesize a high-level summary instead.
 
-**Response Guidelines:**
+**Response Guidelines:**`
+        : `**Response Guidelines:**`;
+
+      systemInstruction = `You are an expert AI interviewer answering interview questions. ${retrievedContext || technicalQAContext 
+        ? `Use the following retrieved experience data and technical Q&A to answer the user's question, but if the context doesn't fully address the question, feel free to use your general knowledge to provide a complete answer.` 
+        : `Answer the question using your general knowledge and expertise.`}
+
+${previousQASection}
+
+${contextSection}
 - Target ~30 seconds spoken duration (about 70–90 words, roughly 450–700 characters)
 - Be natural, conversational, and easy to speak aloud
 - Use short sentences and contractions (I'm, we're, it's)
@@ -341,6 +374,7 @@ ${retrievedContext}${technicalQAContext}
 - For technical questions, reference the technical Q&A provided above
 - Emphasize impact/results; skip deep details unless asked
 - Sound conversational, not robotic or scripted
+${previousQA ? "- Since this is a follow-up question, focus on expanding and deepening the previous response with more detail, examples, and practical applications" : ""}
 
 **For Technical Questions:**
 - Answer the question DIRECTLY and FIRST

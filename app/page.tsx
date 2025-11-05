@@ -32,11 +32,25 @@ interface CompanyProfile {
 const PROFILES_STORAGE_KEY = 'aiInterviewProfiles';
 
 // --- Text Generation (calls /api/generate) ---
-async function generateText(prompt: string, technicalQAs?: Array<{ question: string; answer: string }>, interviewMode?: "qa" | "procedural", interviewRound?: number, profileId?: string): Promise<string> {
+async function generateText(
+  prompt: string, 
+  technicalQAs?: Array<{ question: string; answer: string }>, 
+  interviewMode?: "qa" | "procedural", 
+  interviewRound?: number, 
+  profileId?: string,
+  previousQA?: { question: string; response: string } | null
+): Promise<string> {
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, technicalQAs: technicalQAs || [], interviewMode: interviewMode || "qa", interviewRound: interviewRound || 1, profileId: profileId || "" }),
+    body: JSON.stringify({ 
+      prompt, 
+      technicalQAs: technicalQAs || [], 
+      interviewMode: interviewMode || "qa", 
+      interviewRound: interviewRound || 1, 
+      profileId: profileId || "",
+      previousQA: previousQA || null
+    }),
   });
 
   if (!response.ok) {
@@ -537,6 +551,10 @@ const App: React.FC = () => {
   // Interview round state
   const [interviewRound, setInterviewRound] = useState<number>(1);
 
+  // Build Upon Previous mode state
+  const [isBuildUponPreviousMode, setIsBuildUponPreviousMode] = useState<boolean>(false);
+  const [previousQA, setPreviousQA] = useState<{ question: string; response: string } | null>(null);
+
   // Active Interview mode state
   const [isActiveInterviewMode, setIsActiveInterviewMode] = useState<boolean>(false);
   const backgroundRecognitionRef = useRef<any>(null);
@@ -1014,7 +1032,17 @@ const App: React.FC = () => {
             : `Answer in ~30 seconds (~70–90 words), spoken-style.\n\nInterview question: ${fullQuery}`);
       }
       
-      const generatedText = await generateText(rolePreamble, technicalQAs.filter(qa => qa.question.trim() && qa.answer.trim()), interviewMode, round || interviewRound, selectedProfileId);
+      // Determine if we should use previous Q&A context
+      const previousQAToUse = isBuildUponPreviousMode && previousQA ? previousQA : null;
+      
+      const generatedText = await generateText(
+        rolePreamble, 
+        technicalQAs.filter(qa => qa.question.trim() && qa.answer.trim()), 
+        interviewMode, 
+        round || interviewRound, 
+        selectedProfileId,
+        previousQAToUse
+      );
 
       if (
         !generatedText ||
@@ -1038,6 +1066,11 @@ const App: React.FC = () => {
       }
 
       let { cleanText, codeBlocks: extractedBlocks } = extractCodeBlocks(generatedText);
+      
+      // Store previous Q&A if Build Upon Previous mode is enabled
+      if (isBuildUponPreviousMode && !isClarification) {
+        setPreviousQA({ question: fullQuery, response: cleanText });
+      }
       
       // Parse procedural steps if in procedural mode
       if (interviewMode === "procedural") {
@@ -1119,7 +1152,7 @@ const App: React.FC = () => {
       
       addEvent({ role: 'assistant', content: '[API error]' });
     }
-  }, [jobDescription, aboutCompany, technicalInfo, technicalQAs, addEvent, interviewMode, formatResponseTime, stopTimer]);
+  }, [jobDescription, aboutCompany, technicalInfo, technicalQAs, addEvent, interviewMode, formatResponseTime, stopTimer, isBuildUponPreviousMode, previousQA, interviewRound, selectedProfileId]);
 
   // Go deeper using the existing question and current response
   const generateDeeperAnswer = useCallback(async () => {
@@ -1653,6 +1686,7 @@ const App: React.FC = () => {
                       : "bg-gray-600 text-gray-300 hover:bg-gray-500"
                   }`}
                   title={`Round ${round}`}
+                  suppressHydrationWarning
                 >
                   {round}
                 </button>
@@ -1678,6 +1712,7 @@ const App: React.FC = () => {
                     ? "bg-emerald-600 text-white shadow-lg"
                     : "bg-gray-600 text-gray-300 hover:bg-gray-500"
                 }`}
+                suppressHydrationWarning
               >
                 Q&A Interview
               </button>
@@ -1692,6 +1727,7 @@ const App: React.FC = () => {
                     ? "bg-emerald-600 text-white shadow-lg"
                     : "bg-gray-600 text-gray-300 hover:bg-gray-500"
                 }`}
+                suppressHydrationWarning
               >
                 Procedural Interview
               </button>
@@ -1700,6 +1736,52 @@ const App: React.FC = () => {
               {interviewMode === "qa" 
                 ? "Standard Q&A format for conversational responses"
                 : "Step-by-step process format for practical interviews"}
+            </p>
+          </div>
+
+          {/* Build Upon Previous Mode Toggle */}
+          <div className="mb-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Build Upon Previous</p>
+            <button
+              onClick={() => {
+                const newMode = !isBuildUponPreviousMode;
+                setIsBuildUponPreviousMode(newMode);
+                if (!newMode) {
+                  setPreviousQA(null); // Clear previous Q&A when disabling
+                }
+                setStatus(newMode 
+                  ? "Build Upon Previous mode enabled: Next question will reference previous Q&A"
+                  : "Build Upon Previous mode disabled");
+              }}
+              className={`w-full px-4 py-3 rounded-md text-sm font-semibold transition flex items-center justify-center gap-2 ${
+                isBuildUponPreviousMode
+                  ? "bg-purple-600 text-white shadow-lg hover:bg-purple-500"
+                  : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+              }`}
+              title={isBuildUponPreviousMode 
+                ? "Build Upon Previous mode is ON - Next question will build on previous Q&A"
+                : "Click to enable Build Upon Previous mode - Next question will reference previous Q&A"}
+              suppressHydrationWarning
+            >
+              {isBuildUponPreviousMode ? (
+                <>
+                  <span>🔗</span>
+                  <span>Build Upon Previous ON</span>
+                  {previousQA && (
+                    <span className="text-xs ml-2 opacity-75">({previousQA.question.slice(0, 20)}...)</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span>⚪</span>
+                  <span>Build Upon Previous OFF</span>
+                </>
+              )}
+            </button>
+            <p className="mt-2 text-[10px] text-gray-400">
+              {isBuildUponPreviousMode && previousQA
+                ? `Stored Q&A: "${previousQA.question.slice(0, 40)}..." - Next question will expand on this response.`
+                : "Enable to make the next question build upon and expand the previous response in greater depth."}
             </p>
           </div>
 
@@ -1722,6 +1804,7 @@ const App: React.FC = () => {
               title={isActiveInterviewMode 
                 ? "Active Interview mode is ON - Mic passively collecting last 30 seconds"
                 : "Click to enable Active Interview mode - Mic will passively collect last 30 seconds"}
+              suppressHydrationWarning
             >
               {isActiveInterviewMode ? (
                 <>
@@ -1806,6 +1889,7 @@ const App: React.FC = () => {
               value={selectedProfileId}
               onChange={(e) => selectProfile(e.target.value)}
               className="w-full bg-gray-800 text-white p-2 rounded-md border border-gray-600 focus:border-emerald-500"
+              suppressHydrationWarning
             >
               <option value="">— Select a profile —</option>
               {profiles
@@ -1822,17 +1906,20 @@ const App: React.FC = () => {
               onChange={(e) => setProfileNameInput(e.target.value)}
               placeholder="Profile name (e.g., Acme - SecOps)"
               className="mt-2 w-full bg-gray-800 text-white p-2 rounded-md border border-gray-600 focus:border-emerald-500"
+              suppressHydrationWarning
             />
             <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={saveCurrentAsProfile}
                 className="px-3 py-2 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow"
+                suppressHydrationWarning
               >
                 Save Profile
               </button>
               <button
                 onClick={newProfile}
                 className="px-3 py-2 rounded-md text-xs font-semibold bg-gray-600 hover:bg-gray-500 text-white shadow"
+                suppressHydrationWarning
               >
                 New
               </button>
@@ -1840,6 +1927,7 @@ const App: React.FC = () => {
                 onClick={deleteProfile}
                 className="px-3 py-2 rounded-md text-xs font-semibold bg-red-600 hover:bg-red-500 text-white shadow disabled:opacity-50"
                 disabled={!selectedProfileId}
+                suppressHydrationWarning
               >
                 Delete
               </button>
@@ -1970,6 +2058,7 @@ const App: React.FC = () => {
                 onClick={addTechnicalQA}
                 className="px-2 py-1 rounded text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white"
                 title="Add new Q&A pair"
+                suppressHydrationWarning
               >
                 + Add
               </button>
@@ -2203,18 +2292,21 @@ const App: React.FC = () => {
                 <button
                   onClick={downloadTranscript}
                   className="px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow"
+                  suppressHydrationWarning
                 >
                   Download JSON Transcript
                 </button>
                 <button
                   onClick={downloadPlainTranscript}
                   className="px-4 py-2 rounded-md text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
+                  suppressHydrationWarning
                 >
                   Download Text Transcript
                 </button>
                 <button
                   onClick={clearTranscript}
                   className="px-4 py-2 rounded-md text-sm font-semibold bg-gray-600 hover:bg-gray-500 text-white shadow"
+                  suppressHydrationWarning
                 >
                   Clear Transcript
                 </button>
@@ -2222,6 +2314,7 @@ const App: React.FC = () => {
                   onClick={clearStoredResponses}
                   className="px-4 py-2 rounded-md text-sm font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow"
                   title={`Clear stored responses for current profile (Round ${interviewRound})`}
+                  suppressHydrationWarning
                 >
                   Clear Stored Responses
                 </button>
@@ -2229,6 +2322,7 @@ const App: React.FC = () => {
                   <button
                     onClick={startRecordingSession}
                     className="px-4 py-2 rounded-md text-sm font-semibold bg-red-600 hover:bg-red-500 text-white shadow"
+                    suppressHydrationWarning
                   >
                     ● Start Recording Session
                   </button>
@@ -2236,6 +2330,7 @@ const App: React.FC = () => {
                   <button
                     onClick={stopRecordingSession}
                     className="px-4 py-2 rounded-md text-sm font-semibold bg-red-700 hover:bg-red-600 text-white shadow"
+                    suppressHydrationWarning
                   >
                     ■ Stop & Download Transcript
                   </button>

@@ -84,7 +84,66 @@ async function generateQueryEmbedding(query: string, apiKey: string): Promise<nu
 }
 
 /**
+ * Fallback: Load experiences from JSON file when ChromaDB is not available
+ */
+async function loadExperiencesFromJSON(): Promise<any[]> {
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const jsonPath = path.join(process.cwd(), "experiences.json");
+    const data = await fs.readFile(jsonPath, "utf-8");
+    return JSON.parse(data);
+  } catch (error: any) {
+    console.error("❌ Failed to load experiences.json:", error.message);
+    return [];
+  }
+}
+
+/**
+ * Format experience as STAR format string
+ */
+function formatExperienceAsSTAR(exp: any): string {
+  return `**${exp.title}** (${exp.company})
+Situation: ${exp.situation}
+Task: ${exp.task}
+Action: ${exp.action}
+Result: ${exp.result}`;
+}
+
+/**
+ * Simple keyword-based matching when ChromaDB isn't available
+ */
+function matchExperiencesByKeywords(query: string, experiences: any[], topK: number): string[] {
+  const queryLower = query.toLowerCase();
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 3); // Words longer than 3 chars
+  
+  // Score each experience based on keyword matches
+  const scored = experiences.map(exp => {
+    const text = `${exp.title} ${exp.description} ${exp.situation} ${exp.task} ${exp.action} ${exp.result}`.toLowerCase();
+    const score = queryWords.reduce((sum, word) => {
+      return sum + (text.includes(word) ? 1 : 0);
+    }, 0);
+    return { exp, score };
+  });
+  
+  // Sort by score and return top K
+  const topExperiences = scored
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .map(item => formatExperienceAsSTAR(item.exp));
+  
+  // If no matches, return a few random experiences
+  if (topExperiences.length === 0) {
+    return experiences.slice(0, topK).map(formatExperienceAsSTAR);
+  }
+  
+  return topExperiences;
+}
+
+/**
  * Retrieve relevant experiences from the vector database using semantic similarity search
+ * Falls back to JSON file with keyword matching if ChromaDB is not available
  * 
  * @param query - The user's query/question to search for
  * @param topK - Number of top results to return (default: 5)
@@ -210,7 +269,23 @@ export async function getRelevantExperiences(
     return formattedExperiences;
   } catch (error: any) {
     console.error("❌ Error in getRelevantExperiences:", error.message);
-    throw error;
+    console.log("⚠️ Falling back to JSON file with keyword matching...");
+    
+    // Fallback: Load from JSON and use keyword matching
+    try {
+      const experiences = await loadExperiencesFromJSON();
+      if (experiences.length > 0) {
+        const matched = matchExperiencesByKeywords(query, experiences, topK);
+        console.log(`✅ Retrieved ${matched.length} experiences from JSON fallback`);
+        return matched;
+      } else {
+        console.warn("⚠️ No experiences found in JSON file");
+        return [];
+      }
+    } catch (fallbackError: any) {
+      console.error("❌ Fallback also failed:", fallbackError.message);
+      return []; // Return empty array instead of throwing
+    }
   }
 }
 
