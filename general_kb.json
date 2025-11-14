@@ -1,0 +1,87 @@
+[
+  {
+    "id": "tls-1-0-vs-1-2",
+    "title": "TLS 1.0 vs TLS 1.2",
+    "content": "Transport Layer Security (TLS) provides encrypted communication. TLS 1.0/1.1 are deprecated because of attacks such as BEAST, POODLE, and SWEET32 and because they rely on weak cipher suites, MD5/SHA-1 hashing, and static RSA key exchange. TLS 1.2 mandates stronger SHA-256+ hashing, AEAD cipher suites, ephemeral key exchange (ECDHE) for forward secrecy, and removes legacy algorithms like RC4 and 3DES."
+  },
+  {
+    "id": "cloud-monitoring-tools",
+    "title": "Cloud Provider Monitoring Services",
+    "content": "AWS CloudTrail captures governance and API activity, while CloudWatch monitors performance metrics, logs, and alarms. Azure Monitor unifies metrics, logs, Application Insights, and alerts. GCP pairs Cloud Monitoring for metrics/dashboards with Cloud Logging (including Audit Logs). Auxiliary AWS tooling includes Config for configuration drift, GuardDuty for threat detection, and X-Ray for distributed tracing."
+  },
+  {
+    "id": "vpc-peering-ip-conflict",
+    "title": "AWS VPC Peering Overlap Options",
+    "content": "VPC Peering fails when CIDR blocks overlap. Resolution options: (1) Re-IP one VPC to a non-overlapping range for a permanent fix. (2) Add a secondary CIDR, migrate required workloads to subnets in that range, and route via peering. (3) Use a NAT gateway or proxy to translate addresses across the peering, trading complexity and cost for minimal disruption."
+  },
+  {
+    "id": "azure-vnet-peering-conflict",
+    "title": "Azure VNet Peering Overlap Options",
+    "content": "Azure VNet peering also requires unique address spaces. Mitigation mirrors AWS: re-IP one VNet, add a secondary CIDR and migrate workloads, or insert an NVA/NAT device (Azure Firewall or third-party appliance) to translate traffic. Azure applies Network Security Groups (NSGs) at NIC and subnet levels rather than separate NACL/SG constructs."
+  },
+  {
+    "id": "azure-monitoring-security",
+    "title": "Azure Monitoring vs Microsoft Defender for Cloud",
+    "content": "Azure Monitor handles operational telemetry: metrics, Log Analytics (KQL), and Application Insights. Microsoft Defender for Cloud focuses on security posture with CSPM (Secure Score, benchmark assessments) and CWP (threat protection for VMs, SQL, storage, containers). Rough mapping: CloudWatch ↔ Azure Monitor, CloudTrail ↔ Azure Activity Log, Security Hub ↔ Defender for Cloud CSPM, GuardDuty ↔ Defender for Cloud CWP."
+  },
+  {
+    "id": "azure-ad-vs-entra",
+    "title": "Active Directory vs Microsoft Entra ID",
+    "content": "Traditional AD DS is on-premises, hierarchical, and uses Kerberos/NTLM and LDAP with Group Policy controlling devices. Microsoft Entra ID (Azure AD) is cloud-based IDaaS with a flat structure, modern auth protocols (SAML, OAuth 2.0, OpenID Connect), Conditional Access policies, and serves SaaS/Azure workloads. Connectivity shifts from DC/VPN requirements to HTTPS with optional Azure AD Connect sync."
+  },
+  {
+    "id": "http-401-unauthorized",
+    "title": "HTTP 401 Unauthorized Explained",
+    "content": "HTTP 401 indicates the request lacked valid authentication credentials. The server returns WWW-Authenticate headers to describe the required scheme (Basic, Bearer, Digest, etc.). It differs from 403 (authorization) and 404 (resource missing). As a 4xx code it highlights a client-side issue: valid proof of identity was missing or incorrect."
+  },
+  {
+    "id": "azure-common-applications",
+    "title": "Common Azure Workloads and Prerequisites",
+    "content": "Azure supports over 200 services. Common workloads include: (1) Application hosting with App Service + Azure SQL/Cosmos DB for traditional web apps, AKS/Container Apps for microservices, and Azure Functions for serverless code, each requiring ready code, container images, or trigger definitions. (2) Data & analytics using Synapse, Data Lake Storage, Power BI, managed databases (SQL, Cosmos, PostgreSQL/MySQL), and big data engines (Databricks/HDInsight) which call for ETL strategy, schema design, and Spark/Hadoop expertise. (3) AI/ML workloads via Azure Machine Learning and Azure AI Services, needing datasets, data science skills, and API integration; bots use Azure AI Bot Service. (4) Infrastructure & hybrid operations using Virtual Machines, VNets, Azure Backup/Site Recovery, and Azure Arc, requiring ops skills, sizing, and network planning. Universal prerequisites: an Azure subscription, Microsoft Entra ID for IAM, foundational cloud knowledge (IaaS/PaaS/SaaS, regions, availability zones, resource groups), and cost management practices." 
+  },
+  {
+    "id": "elasticsearch-core-usage",
+    "title": "Elasticsearch Core Usage Overview",
+    "content": "Elasticsearch exposes a REST API for CRUD and cluster operations: POST/PUT /<index>/_doc adds docs, GET retrieves by ID, GET/POST /<index>/_search uses Query DSL for rich queries, POST /<index>/_update/<id> updates, DELETE removes, and cluster endpoints like GET /_cluster/health manage status and index creation. Official client libraries (Python, Java, JavaScript, Go, .NET, PHP, Ruby, Rust) provide language-native wrappers, while higher-level tools such as App Search/Search UI simplify building search experiences. Data ingestion relies on Beats (Filebeat for logs, Metricbeat for metrics, Packetbeat for network) for lightweight shipping and Logstash for server-side pipelines with inputs/filters/outputs. Kibana delivers a web UI for search/analysis, dashboards, Dev Tools console, and stack management. Advanced APIs include Query DSL with full-text search and aggregations, vector search for semantic/RAG scenarios, Snapshot/Restore for backups to S3/Azure/GCS, and Index Lifecycle Management (ILM) to transition indices across hot-warm-cold phases." 
+  },
+  {
+    "id": "elasticsearch-consultant-skillset",
+    "title": "Elasticsearch Architecture and Consulting Skills",
+    "content": "Key consulting competencies include: (1) Architecture & scaling—designing clusters with appropriate node roles (master, data hot/warm/cold, ingest, coordinating), sizing JVM heap (≤32 GB, ~50% RAM), employing rack awareness, tuning shard counts, aliases, and ILM policies, plus enabling cross-cluster search/replication. (2) Search optimization—mastery of Query DSL (match, term, bool, function_score), correct use of filters vs scoring queries, crafting mappings/type choices, custom analyzers/tokenizers for stemming/synonyms, BM25 relevance tuning with boosts/function_score, synonyms/stopwords, and complex aggregations. (3) Ingestion & ETL—building Logstash pipelines with grok filters, deploying Beats (Filebeat, Metricbeat, Auditbeat, etc.), designing ingest pipelines, integrating with Kafka/RabbitMQ, and writing custom ingestion scripts. (4) Security & observability—implementing RBAC, TLS/SSL, field/document-level security, monitoring via Kibana Stack Monitoring and _cluster/health/_cat, configuring alerting/watchers, and managing snapshots/restores. (5) Emerging use cases—vector search/kNN for semantic RAG, Enterprise Search deployments, Elastic ML for anomaly detection/forecasting, and observability solutions (logs, metrics, APM). (6) Consulting skills—clear communication, requirements gathering, multi-cloud fluency (AWS, Azure, GCP, Elastic Cloud), and automation proficiency in Python/Bash." 
+  },
+  {
+    "id": "elasticsearch-aws-self-hosted",
+    "title": "Deploying Elasticsearch on AWS EC2",
+    "content": "Self-hosting Elasticsearch on AWS requires planned topology: use a VPC and multiple AZs with dedicated security groups (port 9300 for node-to-node, 9200 for API access). Provision master-eligible nodes (smaller) and data nodes (memory/storage optimized), keeping JVM heap at ≤50% of RAM and ≤32 GB. Attach fast SSD EBS volumes sized with headroom for merges. Install prerequisites (OpenJDK), Elasticsearch packages, disable swap, and raise file descriptor limits. Configure elasticsearch.yml with cluster.name, unique node.name, network.host, discovery.seed_hosts, cluster.initial_master_nodes, and enable xpack security. Set heap in jvm.options (-Xms/-Xmx). Start services (systemctl) and verify via GET /_cluster/health. Managed alternative: Amazon OpenSearch Service, where AWS handles deployment, scaling, and snapshots."
+  },
+  {
+    "id": "elasticsearch-azure-self-hosted",
+    "title": "Deploying Elasticsearch on Azure VMs",
+    "content": "Self-hosted Azure deployment involves creating a VNet with dedicated subnets, then provisioning memory/storage-optimized VMs across multiple Availability Zones for high availability. Follow the 50% heap rule (≤32 GB). Attach Premium/Ultra SSD managed disks, often striped for better I/O. Secure the environment with NSGs that permit 9300 only intra-subnet, 9200 only from approved sources (apps/Kibana), and SSH/RDP only from management networks. Install prerequisites (OpenJDK), Elasticsearch packages, disable swap, increase file descriptors, mount the data disks, and configure elasticsearch.yml with cluster name, network.host, discovery.seed_hosts, cluster.initial_master_nodes, and enable xpack security. Start services and verify via _cat/nodes. Managed alternative: Elastic Cloud on Azure Marketplace (Azure Native ISV Service) for turnkey deployment with Azure billing integration." 
+  },
+  {
+    "id": "elasticsearch-gcp-self-hosted",
+    "title": "Deploying Elasticsearch on GCP Compute Engine",
+    "content": "On GCP you self-host by provisioning Compute Engine VMs inside a VPC with firewall rules that allow 9300 only within cluster nodes and 9200 only from trusted sources. Spread nodes across multiple zones. Pick instance types with adequate RAM/CPU (N2/C2/M-series) and use high-performance storage—local SSDs for low latency (with snapshot planning) or Persistent SSDs sized large for better IOPS. Keep JVM heap ≤50% of memory (≤32 GB). Install JDK and Elasticsearch, disable swap, raise file descriptors, set vm.max_map_count=262144, mount attached disks (setting path.data). Configure elasticsearch.yml (cluster.name, network.host, discovery.seed_hosts, cluster.initial_master_nodes) and enable snapshots via the GCS repository plugin. Start services and verify with _cluster/health. Managed alternative: Elastic Cloud via GCP Marketplace with billing integration and managed upgrades."
+  },
+  {
+    "id": "elasticsearch-core-config",
+    "title": "Elasticsearch Core Configuration and OS Tuning",
+    "content": "Key config files reside in the Elasticsearch config directory: (1) elasticsearch.yml sets cluster identity (cluster.name, node.name), networking (network.host, http.port, transport.port), discovery (discovery.seed_hosts, cluster.initial_master_nodes), storage path (path.data), and node.roles. (2) jvm.options controls JVM heap; set -Xms/-Xmx equal, ≤50% of RAM and ≤32 GB, typically using G1GC. (3) log4j2.properties manages logging levels; raise module-specific levels (e.g., discovery) during troubleshooting. Critical OS tuning includes disabling swap, increasing file descriptors (nofile ≥65,536), bumping vm.max_map_count to 262,144, and using appropriate I/O schedulers (noop/deadline). Data management uses Index Lifecycle Management (ILM) policies for hot-warm-cold-delete transitions and index templates for consistent settings/mappings on new indices."
+  },
+  {
+    "id": "logstash-overview",
+    "title": "Logstash Pipeline Overview",
+    "content": "Logstash is the server-side pipeline in the ELK stack, functioning as an ETL engine that streams data through three stages: inputs (files, TCP/UDP, Kafka, JDBC, etc.), filters (grok for parsing logs, mutate for renaming/converting/removing fields, date for timestamp normalization, geoip for enrichment, plus hundreds of others), and outputs (commonly Elasticsearch, but also files, cloud storage, queues, or databases). Its plugin architecture (>200 plugins) enables centralized logging, data enrichment, and real-time analytics prior to indexing in Elasticsearch/Kibana." 
+  },
+  {
+    "id": "inverted-index-overview",
+    "title": "Inverted Index Fundamentals",
+    "content": "Elasticsearch/Lucene rely on an inverted index that flips the relationship between documents and terms. During indexing, text fields pass through analyzers: tokenizers break text into tokens, token filters normalize (lowercase, remove punctuation, drop stop words, stem), and the inverted index stores each unique term with postings lists containing document IDs, positions, and frequencies. During search, the query text is analyzed the same way, the engine looks up postings for each term, intersects postings lists (e.g., AND queries), and calculates BM25 relevance using term frequency (TF) and inverse document frequency (IDF). This avoids scanning every document, enabling millisecond full-text search."
+  },
+  {
+    "id": "elasticsearch-rest-commands",
+    "title": "Essential Elasticsearch REST Commands",
+    "content": "Common REST endpoints include: (1) Cluster/health monitoring via _cat APIs—/_cat/health?v (overall status: green/yellow/red), /_cat/nodes?v (node metrics), /_cat/indices?v (index health, docs, size), /_cat/shards?v (shard placement), and /_cluster/allocation/explain for reasons shards are unassigned. (2) Index/data management endpoints—PUT /{index} to create an index with custom settings, POST /{index}/_doc to index a document with auto ID, PUT /{index}/_doc/{id} to create/update with a fixed ID, GET /{index}/_doc/{id} to retrieve, DELETE /{index} to drop an index, and POST /_reindex to copy data between indices. (3) Search endpoints—GET /{index}/_search for default search, GET /_search?q=... for URI query string searches, and POST /_search with JSON Query DSL for full match/bool/range/aggregation queries."
+  }
+]

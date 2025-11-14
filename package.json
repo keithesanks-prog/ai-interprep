@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack --port 3000",
     "dev:https": "node server.js",
-    "build": "next build",
+    "dev:electron": "cross-env NODE_ENV=development concurrently \"npm:dev\" \"npm:electron:start\"",
+    "electron:build-once": "tsc --project tsconfig.electron.json",
+    "electron:start": "wait-on http://localhost:3000 && npm run electron:build-once && cross-env NODE_ENV=development electron electron/dist/main.js",
+    "build": "next build --webpack",
+    "build:electron": "tsc --project tsconfig.electron.json && next build --webpack",
+    "electron:package": "npm run build:electron && electron-builder",
     "start": "next start",
     "lint": "eslint"
   },
@@ -21,9 +26,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^39.1.2",
+    "electron-builder": "^24.13.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "ts-node": "^10.9.2",
+    "typescript": "^5",
+    "wait-on": "^7.2.0"
   }
 }

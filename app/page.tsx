@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useContinuousSpeech } from "./hooks/useContinuousSpeech";
 
 type Status = string;
 
@@ -524,6 +525,14 @@ const App: React.FC = () => {
   // Generation state flags (separate from status for button control)
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState<string>(""); // Real-time transcription display
+  const recognitionInstanceRef = useRef<any>(null); // Store the recognition instance for stopping
+  const networkRetryCountRef = useRef(0); // Track network error retries
+  const networkRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Retry timeout
+  const isRetryingNetworkRef = useRef(false); // Track if we're in a network retry cycle
+  const useAssemblyAIRef = useRef(false); // Track if we should use AssemblyAI instead of Web Speech API
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null); // For AssemblyAI audio recording
+  const audioChunksRef = useRef<Blob[]>([]); // For AssemblyAI audio chunks
 
   // Response timer state
   const [responseTimerStart, setResponseTimerStart] = useState<number | null>(null);
@@ -1154,6 +1163,33 @@ const App: React.FC = () => {
     }
   }, [jobDescription, aboutCompany, technicalInfo, technicalQAs, addEvent, interviewMode, formatResponseTime, stopTimer, isBuildUponPreviousMode, previousQA, interviewRound, selectedProfileId]);
 
+  const continuousListenerCallback = useCallback(
+    async (transcript: string) => {
+      const trimmed = transcript.trim();
+      if (!trimmed) return;
+      if (isGeneratingResponse || isListening || isGeneratingClarifying || isGeneratingDeeper) {
+        return;
+      }
+      setStatus(`Heard (auto): ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "..." : ""}`);
+      await handleQuery(trimmed);
+    },
+    [
+      handleQuery,
+      isGeneratingResponse,
+      isListening,
+      isGeneratingClarifying,
+      isGeneratingDeeper,
+      setStatus,
+    ]
+  );
+
+  const {
+    isListening: isAutoListening,
+    isSupported: isAutoListeningSupported,
+    start: startAutoListening,
+    stop: stopAutoListening,
+  } = useContinuousSpeech(continuousListenerCallback, { startOnToggle: true });
+
   // Go deeper using the existing question and current response
   const generateDeeperAnswer = useCallback(async () => {
     if (!question.trim() || !fullResponse.trim()) {
@@ -1450,14 +1486,312 @@ const App: React.FC = () => {
     };
   }, [isActiveInterviewMode, startBackgroundRecognition, stopBackgroundRecognition, cleanupRollingBuffer]);
 
+  // Stop listening function - can optionally submit the transcribed text
+  const stopListening = useCallback((submitTranscript: boolean = false, finalTranscript?: string) => {
+    const textToSubmit = finalTranscript || liveTranscript;
+    
+    // Clear any pending network retry
+    if (networkRetryTimeoutRef.current) {
+      clearTimeout(networkRetryTimeoutRef.current);
+      networkRetryTimeoutRef.current = null;
+    }
+    networkRetryCountRef.current = 0;
+    isRetryingNetworkRef.current = false;
+    
+    // Stop Web Speech API if active
+    if (recognitionInstanceRef.current) {
+      try {
+        recognitionInstanceRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping recognition:", e);
+      }
+      recognitionInstanceRef.current = null;
+    }
+    
+    // Stop AssemblyAI recording if active
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        // Request any remaining data before stopping
+        if (mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.requestData();
+        }
+        mediaRecorderRef.current.stop();
+        console.log("MediaRecorder stop requested");
+      } catch (e) {
+        console.error("Error stopping MediaRecorder:", e);
+      }
+      // Note: mediaRecorderRef will be cleared in onstop handler
+    }
+    
+    // If we have transcribed text and user wants to submit, process it
+    if (submitTranscript && textToSubmit.trim().length > 0) {
+      const finalText = textToSubmit.trim();
+      setQuestion(finalText);
+      setIsListening(false);
+      setLiveTranscript("");
+      setStatus("Submitting transcribed question...");
+      
+      // Start response timer
+      const startTime = Date.now();
+      setResponseTimerStart(startTime);
+      timerStartRef.current = startTime;
+      isTimerRunningRef.current = true;
+      setIsTimerRunning(true);
+      setResponseTime(null);
+      
+      addEvent({ role: 'user', content: finalText, metadata: { source: 'microphone' } });
+      handleQuery(finalText);
+    } else {
+      setIsListening(false);
+      setLiveTranscript("");
+      setStatus("Stopped listening.");
+    }
+  }, [liveTranscript, handleQuery, addEvent]);
+
+  // Test connectivity to Web Speech API service
+  const testSpeechServiceConnectivity = useCallback(async (): Promise<boolean> => {
+    try {
+      // Try to reach Google's speech recognition service
+      const response = await fetch("https://www.google.com", { 
+        method: "HEAD", 
+        mode: "no-cors",
+        cache: "no-cache"
+      });
+      return true;
+    } catch (err) {
+      console.warn("Connectivity test failed:", err);
+      return false;
+    }
+  }, []);
+
   const startListening = useCallback(async () => {
-    if (!isSpeechSupported) {
-      setStatus("Error: Speech Recognition not supported.");
+    // Toggle: if already listening, stop and submit the transcribed text
+    if (isListening && (recognitionInstanceRef.current || mediaRecorderRef.current)) {
+      // Get the latest transcript before stopping
+      const currentTranscript = liveTranscript;
+      stopListening(true, currentTranscript); // Submit the transcript when stopping
       return;
     }
 
     const ok = await requestMicPermission();
     if (!ok) return;
+
+    // If AssemblyAI is enabled, use it instead of Web Speech API
+    if (useAssemblyAIRef.current) {
+      try {
+        setStatus("🎤 Recording with AssemblyAI...");
+        setIsListening(true);
+        setLiveTranscript("");
+        
+        // Get microphone stream
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100,
+          }
+        });
+        
+        // Check for supported mime types
+        const mimeTypes = [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/ogg;codecs=opus",
+          "audio/mp4",
+        ];
+        
+        let selectedMimeType = "";
+        for (const mimeType of mimeTypes) {
+          if (MediaRecorder.isTypeSupported(mimeType)) {
+            selectedMimeType = mimeType;
+            break;
+          }
+        }
+        
+        if (!selectedMimeType) {
+          // Fallback to default
+          selectedMimeType = "";
+        }
+        
+        console.log("Using mime type:", selectedMimeType || "default");
+        
+        // Create MediaRecorder
+        const mediaRecorder = new MediaRecorder(stream, selectedMimeType ? {
+          mimeType: selectedMimeType,
+        } : undefined);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.onerror = (event: any) => {
+          console.error("MediaRecorder error:", event);
+          setStatus("❌ Recording error occurred");
+        };
+
+        mediaRecorder.ondataavailable = (event) => {
+          console.log("Audio data available:", event.data.size, "bytes");
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+            // Update status to show we're capturing audio
+            const currentSize = audioChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+            setStatus(`🎤 Recording... (${Math.round(currentSize / 1024)}KB captured)`);
+          } else {
+            console.warn("⚠️ Received empty audio chunk");
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const totalSize = audioChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+          console.log("Recording stopped. Total chunks:", audioChunksRef.current.length);
+          console.log("Total audio size:", totalSize, "bytes");
+          
+          // Stop all tracks
+          stream.getTracks().forEach((track) => track.stop());
+
+          // Check if we have any audio data
+          if (audioChunksRef.current.length === 0 || totalSize === 0) {
+            setStatus("❌ No audio recorded. Please speak and wait at least 1-2 seconds before stopping.");
+            setIsListening(false);
+            mediaRecorderRef.current = null;
+            audioChunksRef.current = [];
+            return;
+          }
+
+          // Create audio blob with correct type
+          const blobType = selectedMimeType || "audio/webm";
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: blobType,
+          });
+          
+          console.log("Audio blob created:", audioBlob.size, "bytes", "type:", blobType);
+
+          if (audioBlob.size === 0) {
+            setStatus("❌ Audio blob is empty. Please try again and speak for at least 2-3 seconds.");
+            setIsListening(false);
+            mediaRecorderRef.current = null;
+            audioChunksRef.current = [];
+            return;
+          }
+          
+          // Warn if audio is very small (might be too short)
+          if (audioBlob.size < 1000) {
+            console.warn("⚠️ Audio file is very small (", audioBlob.size, "bytes). Recording might be too short.");
+          }
+
+          // Determine file extension based on mime type
+          let fileExtension = "webm";
+          if (blobType.includes("ogg")) {
+            fileExtension = "ogg";
+          } else if (blobType.includes("mp4")) {
+            fileExtension = "m4a";
+          } else if (blobType.includes("wav")) {
+            fileExtension = "wav";
+          }
+
+          // Send to API for transcription
+          try {
+            setStatus("🎤 Transcribing with AssemblyAI...");
+            const formData = new FormData();
+            formData.append("audio", audioBlob, `recording.${fileExtension}`);
+            formData.append("language", "en-US");
+            
+            console.log("Sending audio to API:", {
+              size: audioBlob.size,
+              type: blobType,
+              extension: fileExtension,
+            });
+
+            const response = await fetch("/api/speech-to-text", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || "Transcription failed");
+            }
+
+            const data = await response.json();
+            if (data.transcript) {
+              const transcript = data.transcript.trim();
+              setQuestion(transcript);
+              setLiveTranscript(transcript);
+              setStatus(`✅ Transcribed: ${transcript.substring(0, 60)}${transcript.length > 60 ? "..." : ""}`);
+              
+              // Start response timer
+              const startTime = Date.now();
+              setResponseTimerStart(startTime);
+              timerStartRef.current = startTime;
+              isTimerRunningRef.current = true;
+              setIsTimerRunning(true);
+              setResponseTime(null);
+              
+              addEvent({ role: 'user', content: transcript, metadata: { source: 'microphone', method: 'assemblyai' } });
+              handleQuery(transcript);
+            } else {
+              setStatus("🎤 No speech detected. Try again.");
+            }
+          } catch (err: any) {
+            console.error("AssemblyAI transcription error:", err);
+            setStatus(`❌ Transcription failed: ${err.message}`);
+          } finally {
+            setIsListening(false);
+            mediaRecorderRef.current = null;
+            audioChunksRef.current = [];
+          }
+        };
+
+        // Verify the stream is active before starting
+        const audioTracks = stream.getAudioTracks();
+        console.log("Audio tracks:", audioTracks.length);
+        if (audioTracks.length === 0) {
+          throw new Error("No audio tracks available in stream");
+        }
+        
+        const track = audioTracks[0];
+        console.log("Audio track settings:", track.getSettings());
+        console.log("Audio track state:", track.readyState);
+        console.log("Audio track enabled:", track.enabled);
+        
+        if (track.readyState !== "live") {
+          throw new Error("Audio track is not live");
+        }
+        
+        // Start recording with timeslice to capture data periodically (every 1 second)
+        try {
+          mediaRecorder.start(1000);
+          console.log("MediaRecorder started, state:", mediaRecorder.state);
+          
+          // Verify it's actually recording
+          if (mediaRecorder.state !== "recording") {
+            throw new Error(`MediaRecorder failed to start. State: ${mediaRecorder.state}`);
+          }
+        } catch (startError: any) {
+          console.error("Failed to start MediaRecorder:", startError);
+          stream.getTracks().forEach(t => t.stop());
+          throw new Error(`Failed to start recording: ${startError.message}`);
+        }
+        
+        setStatus("🎤 Listening with AssemblyAI... Speak your question (wait 2-3 seconds), then click mic again to stop.");
+      } catch (err: any) {
+        console.error("Failed to start AssemblyAI recording:", err);
+        setStatus(`❌ Failed to start recording: ${err.message}`);
+        setIsListening(false);
+        useAssemblyAIRef.current = false; // Fall back to Web Speech API
+      }
+      return;
+    }
+
+    // Use Web Speech API (original implementation)
+    if (!isSpeechSupported) {
+      setStatus("Error: Speech Recognition not supported.");
+      return;
+    }
+
+    // Test connectivity before starting (non-blocking)
+    const hasConnectivity = await testSpeechServiceConnectivity();
+    if (!hasConnectivity) {
+      console.warn("⚠️ Connectivity test suggests network issues. Web Speech API may not work.");
+    }
 
     // Pause background recognition while main listening is active
     let wasBackgroundActive = false;
@@ -1478,15 +1812,25 @@ const App: React.FC = () => {
     recognition.maxAlternatives = 1;
     recognition.continuous = true;
 
+    // Store recognition instance for stopping
+    recognitionInstanceRef.current = recognition;
+
     setQuestion("");
     setFullResponse("");
     setCodeBlocks([]);
+    setLiveTranscript("");
 
     let allFinalTranscripts: string[] = [];
     let interimTranscript = "";
     let isProcessing = false;
     let speechEndTimeout: NodeJS.Timeout | null = null;
     let lastResultTime = Date.now();
+    
+    // Function to get current complete transcript
+    const getCurrentTranscript = () => {
+      const displayText = [...allFinalTranscripts, interimTranscript].filter(t => t.trim()).join(" ");
+      return displayText.trim();
+    };
 
     const clearSpeechTimeout = () => {
       if (speechEndTimeout) {
@@ -1495,7 +1839,7 @@ const App: React.FC = () => {
       }
     };
 
-    const processCompleteQuestion = () => {
+    const processCompleteQuestion = (manualSubmit: boolean = false) => {
       if (isProcessing) return;
       
       // Combine buffered text with new transcription
@@ -1510,16 +1854,22 @@ const App: React.FC = () => {
         completeQuestion = bufferedText;
       }
       
-      if (completeQuestion.length > 10) {
+      // Only process if we have meaningful text (at least 3 characters for manual submit, 10 for auto)
+      const minLength = manualSubmit ? 3 : 10;
+      if (completeQuestion.length >= minLength) {
         isProcessing = true;
         clearSpeechTimeout();
         setIsListening(false);
+        setLiveTranscript("");
         setQuestion(completeQuestion);
-        const statusMsg = hasBuffer 
+        const statusMsg = manualSubmit 
+          ? "Submitting transcribed question..."
+          : hasBuffer 
           ? `Question (with ${bufferedText.length > 0 ? '30s buffer + ' : ''}new): ${completeQuestion.substring(0, 60)}${completeQuestion.length > 60 ? "..." : ""}`
           : `Complete question: ${completeQuestion.substring(0, 60)}${completeQuestion.length > 60 ? "..." : ""}`;
         setStatus(statusMsg);
         try { recognition.stop(); } catch {}
+        recognitionInstanceRef.current = null;
         addEvent({ role: 'user', content: completeQuestion, metadata: { source: 'microphone', hasBuffer: hasBuffer } });
         
         // Clear the buffer after using it
@@ -1542,46 +1892,49 @@ const App: React.FC = () => {
     let retriedNoSpeech = false;
 
     recognition.onstart = () => {
-      setStatus("Listening continuously... Speak your full question clearly.");
+      setStatus("🎤 Listening... Speak your question.");
       setIsListening(true);
       allFinalTranscripts = [];
       interimTranscript = "";
       isProcessing = false;
       lastResultTime = Date.now();
+      // Reset retry count and flag on successful start
+      networkRetryCountRef.current = 0;
+      isRetryingNetworkRef.current = false;
     };
     
     recognition.onaudiostart = () => {
-      setStatus("Mic active: detecting speech...");
+      setStatus("🎤 Mic active: detecting speech...");
       lastResultTime = Date.now();
     };
     
     recognition.onsoundstart = () => {
-      setStatus("Sound detected. Listening...");
+      setStatus("🎤 Sound detected. Listening...");
       clearSpeechTimeout();
     };
     
     recognition.onspeechstart = () => {
       clearSpeechTimeout();
-      setStatus("Speech detected. Keep speaking...");
+      setStatus("🎤 Speech detected. Keep speaking...");
       lastResultTime = Date.now();
     };
     
     recognition.onspeechend = () => {
-      setStatus("Pause detected. Still listening...");
+      setStatus("🎤 Pause detected. Still listening...");
       lastResultTime = Date.now();
-      // Wait longer - user might be continuing
+      // Wait longer - user might be continuing (ChatGPT-style: longer pause before auto-submit)
       clearSpeechTimeout();
       speechEndTimeout = setTimeout(() => {
         const timeSinceLastResult = Date.now() - lastResultTime;
-        // Only process if it's been quiet for 2+ seconds
-        if (timeSinceLastResult >= 2000 && !isProcessing) {
-          processCompleteQuestion();
+        // Only auto-process if it's been quiet for 5+ seconds (like ChatGPT)
+        if (timeSinceLastResult >= 5000 && !isProcessing && allFinalTranscripts.length > 0) {
+          processCompleteQuestion(false);
         }
-      }, 2000);
+      }, 5000);
     };
     
     recognition.onnomatch = () => {
-      setStatus("Listening... (speaking detected but unclear)");
+      setStatus("🎤 Listening... (speaking detected but unclear)");
       clearSpeechTimeout();
     };
     
@@ -1609,45 +1962,126 @@ const App: React.FC = () => {
       // Build complete transcript for display
       const displayText = [...allFinalTranscripts, interimTranscript].filter(t => t.trim()).join(" ");
       
-      // Show what we've captured so far
+      // Show what we've captured so far - real-time transcription
       if (displayText) {
         setQuestion(displayText + (currentInterim ? "..." : ""));
-        const statusText = displayText.length > 0 ? `Captured: ${displayText.substring(0, 40)}...` : "Listening...";
+        setLiveTranscript(displayText + (currentInterim ? "..." : ""));
+        const statusText = displayText.length > 0 ? `🎤 Transcribing: ${displayText.substring(0, 50)}${displayText.length > 50 ? "..." : ""}` : "🎤 Listening...";
         setStatus(statusText);
       }
       
-      // Reset timeout - wait longer (2.5 seconds) after last result to ensure speech is truly complete
+      // Reset timeout - wait longer (5 seconds) after last result to ensure speech is truly complete
+      // This gives users time to keep speaking, like ChatGPT
       clearSpeechTimeout();
       speechEndTimeout = setTimeout(() => {
         const timeSinceLastResult = Date.now() - lastResultTime;
-        // Only process if it's been quiet for 2.5+ seconds
-        if (timeSinceLastResult >= 2500 && !isProcessing && allFinalTranscripts.length > 0) {
-          processCompleteQuestion();
+        // Only auto-process if it's been quiet for 5+ seconds and we have final transcripts
+        if (timeSinceLastResult >= 5000 && !isProcessing && allFinalTranscripts.length > 0) {
+          processCompleteQuestion(false);
         }
-      }, 2500);
+      }, 5000);
     };
     recognition.onerror = async (event: any) => {
       clearSpeechTimeout();
       const err = event?.error || "unknown";
+      
+      // Handle no-speech errors
       if (err === "no-speech" && !retriedNoSpeech) {
         retriedNoSpeech = true;
-        setStatus("No speech detected. Trying again... Speak right after the beep.");
-        // brief warmup beep simulation via status delay
+        setStatus("🎤 No speech detected. Trying again... Speak now.");
         await new Promise(r => setTimeout(r, 300));
         try { recognition.start(); } catch {}
         return;
       }
-      setStatus("Speech Error: " + err);
+      
+      // Handle network errors with exponential backoff retry
+      if (err === "network") {
+        // Log detailed diagnostic information (using individual logs to ensure visibility)
+        const retryCount = networkRetryCountRef.current;
+        const userAgent = navigator.userAgent;
+        const isElectron = userAgent.includes("Electron");
+        const timestamp = new Date().toISOString();
+        const recognitionExists = !!recognitionInstanceRef.current;
+        const recognitionState = recognitionInstanceRef.current?.state || "unknown";
+        
+        // Log diagnostics as warnings (not errors) to reduce console noise
+        if (networkRetryCountRef.current === 0) {
+          // Only log full diagnostics on first error
+          console.warn("🔴 Web Speech API Network Error - Diagnostics:", {
+            errorType: err,
+            retryCount: retryCount,
+            isElectron: isElectron,
+            platform: navigator.platform,
+            recognitionExists: recognitionExists,
+            recognitionState: recognitionState,
+          });
+        }
+        
+        // Clear any pending retry
+        if (networkRetryTimeoutRef.current) {
+          clearTimeout(networkRetryTimeoutRef.current);
+          networkRetryTimeoutRef.current = null;
+        }
+        
+        // Immediately switch to AssemblyAI on first network error (since it's configured)
+        console.warn("🔄 Switching to AssemblyAI immediately (Web Speech API failed)");
+        networkRetryCountRef.current = 0;
+        isRetryingNetworkRef.current = false;
+        
+        // Switch to AssemblyAI immediately
+        setStatus("🎤 Web Speech API failed. Switching to AssemblyAI...");
+        useAssemblyAIRef.current = true;
+        
+        // Stop Web Speech API
+        try {
+          recognition.stop();
+        } catch (e) {
+          console.warn("Error stopping Web Speech API:", e);
+        }
+        recognitionInstanceRef.current = null;
+        setIsListening(false);
+        
+        // Test connectivity and log (non-blocking)
+        testSpeechServiceConnectivity().then(hasConnectivity => {
+          if (hasConnectivity) {
+            console.warn("✅ Internet works. Using AssemblyAI for reliable transcription.");
+          }
+        });
+        
+        // Restart with AssemblyAI after a brief delay
+        setTimeout(() => {
+          console.log("🔄 Restarting with AssemblyAI...");
+          startListening();
+        }, 500);
+        return;
+      }
+      
+      // For other errors, show the error
+      if (err !== "aborted") {
+        setStatus("Speech Error: " + err);
+      }
       setIsListening(false);
+      setLiveTranscript("");
+      recognitionInstanceRef.current = null;
+      networkRetryCountRef.current = 0;
     };
     recognition.onend = () => {
       clearSpeechTimeout();
+      
+      // Don't clear instance or reset state if we're retrying after a network error
+      if (isRetryingNetworkRef.current) {
+        // Keep the instance alive for retry - don't clear it
+        return;
+      }
+      
       setIsListening(false);
+      setLiveTranscript("");
+      recognitionInstanceRef.current = null;
       // If we have final transcripts but haven't processed yet, do it now
       if (!isProcessing && allFinalTranscripts.length > 0) {
         processCompleteQuestion();
       } else if (!isProcessing && !allFinalTranscripts.length && (status.includes("Listening") || status.includes("Mic active"))) {
-        setStatus("No speech detected. Try again.");
+        setStatus("No speech detected. Click mic button to try again.");
       }
       
       // Resume background recognition if it was active
@@ -1661,8 +2095,9 @@ const App: React.FC = () => {
     try { recognition.start(); } catch (e) {
       console.error("recognition.start failed", e);
       setStatus("Error: Could not start microphone.");
+      recognitionInstanceRef.current = null;
     }
-  }, [isSpeechSupported, status, handleQuery, requestMicPermission, addEvent, isActiveInterviewMode, getBufferedText, startBackgroundRecognition]);
+  }, [isSpeechSupported, status, handleQuery, requestMicPermission, addEvent, isActiveInterviewMode, getBufferedText, startBackgroundRecognition, isListening, stopListening]);
 
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4 sm:p-8 flex items-start justify-center font-sans">
@@ -1825,40 +2260,87 @@ const App: React.FC = () => {
             </p>
           </div>
 
+          {/* Continuous Listener (Electron) */}
+          <div className="mb-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
+            <p className="text-sm font-medium text-gray-300 mb-2">Continuous Listener</p>
+            <button
+              onClick={() => {
+                if (isAutoListening) {
+                  stopAutoListening();
+                  setStatus("Continuous listener stopped.");
+                } else {
+                  startAutoListening();
+                  setStatus("Continuous listener active. Speak naturally and I'll auto-respond.");
+                }
+              }}
+              disabled={!isAutoListeningSupported}
+              className={`w-full px-4 py-3 rounded-md text-sm font-semibold transition flex items-center justify-center gap-2 ${
+                isAutoListening
+                  ? "bg-purple-600 text-white shadow-lg hover:bg-purple-500"
+                  : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+              } ${!isAutoListeningSupported ? "opacity-50 cursor-not-allowed" : ""}`}
+              title={
+                isAutoListeningSupported
+                  ? "Toggle the continuous desktop listener (Electron build)."
+                  : "Continuous listener requires the Electron desktop app."
+              }
+              suppressHydrationWarning
+            >
+              {isAutoListening ? (
+                <>
+                  <span className="animate-pulse">🎙️</span>
+                  <span>Listening (Ctrl+Shift+L to toggle)</span>
+                </>
+              ) : (
+                <>
+                  <span>🎧</span>
+                  <span>Start Desktop Listener</span>
+                </>
+              )}
+            </button>
+            <p className="mt-2 text-[10px] text-gray-400">
+              Requires the Electron desktop build. Use Ctrl+Shift+L to toggle from anywhere.
+            </p>
+          </div>
+
           <button
             onClick={startListening}
             disabled={
               !hasMounted ||
               !isSpeechSupported ||
-              isListening ||
               isGeneratingResponse ||
               isGeneratingDeeper ||
               isGeneratingClarifying
             }
-            className={`p-5 rounded-full shadow-lg transition duration-200 ease-in-out flex items-center space-x-2 text-xl font-bold ${
+            className={`relative p-5 rounded-full shadow-lg transition duration-200 ease-in-out flex items-center space-x-2 text-xl font-bold ${
               !hasMounted ||
               !isSpeechSupported ||
-              isListening ||
               isGeneratingResponse ||
               isGeneratingDeeper ||
               isGeneratingClarifying
                 ? "bg-gray-500 cursor-not-allowed"
+                : isListening
+                ? "bg-red-600 hover:bg-red-500 active:bg-red-700 transform hover:scale-105"
                 : "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transform hover:scale-105"
             }`}
-            aria-label="Start listening for question"
+            aria-label={isListening ? "Stop listening" : "Start listening for question"}
             title={
               !hasMounted ? "Initializing..." :
               !isSpeechSupported ? "Speech Recognition not supported" :
-              isListening ? "Currently listening" :
+              isListening ? "Click to stop listening" :
               isGeneratingResponse ? "Generating response" :
               isGeneratingDeeper ? "Generating deeper answer" :
               isGeneratingClarifying ? "Generating clarifying questions" :
               "Click to start listening"
             }
           >
+            {/* Pulsing animation when listening */}
+            {isListening && (
+              <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75"></span>
+            )}
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="h-8 w-8"
+              className={`h-8 w-8 relative z-10 ${isListening ? "animate-pulse" : ""}`}
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -1873,14 +2355,49 @@ const App: React.FC = () => {
                 clipRule="evenodd"
               />
             </svg>
-            <span>
-              {status.includes("Listening")
-                ? "Listening..."
+            <span className="relative z-10">
+              {isListening
+                ? "Stop Listening"
                 : status.includes("Generating")
                 ? "Thinking..."
-                : "Ask Question"}
+                : "Start Listening"}
             </span>
           </button>
+          
+          {/* Real-time transcription display */}
+          {isListening && (
+            <div className="mt-4 w-72 bg-gray-800 p-4 rounded-lg border-2 border-emerald-500 shadow-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-emerald-400 animate-pulse">🎤</span>
+                <p className="text-sm font-semibold text-emerald-300">Listening...</p>
+              </div>
+              <div className="bg-gray-900 p-3 rounded-md border border-emerald-600 min-h-[100px] max-h-[300px] overflow-y-auto">
+                <p className="text-white text-sm leading-relaxed whitespace-pre-wrap break-words">
+                  {liveTranscript || (
+                    <span className="text-gray-500 italic">Speak your question... transcription will appear here.</span>
+                  )}
+                </p>
+              </div>
+              {liveTranscript && (
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-xs text-gray-400 italic">
+                    Click mic again to submit
+                  </p>
+                  <button
+                    onClick={() => stopListening(true, liveTranscript)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-md transition"
+                  >
+                    Submit
+                  </button>
+                </div>
+              )}
+              {!liveTranscript && (
+                <p className="text-xs text-gray-400 mt-2 italic">
+                  Speak naturally. Click the mic button again when done to submit.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Profiles management */}
           <div className="mt-4 w-72 bg-gray-700 p-3 rounded-lg shadow-inner">
@@ -2252,16 +2769,29 @@ const App: React.FC = () => {
                 <div className="bg-gray-600 p-3 rounded-lg shadow-inner">
               <div className="flex items-center justify-start gap-3 mb-2">
                 <p className="text-sm font-medium text-gray-300">Your Question:</p>
+                {isListening && (
+                  <span className="text-xs text-emerald-400 animate-pulse flex items-center gap-1">
+                    <span>●</span> Transcribing...
+                  </span>
+                )}
               </div>
-                  <div className="min-h-[3rem] overflow-y-auto">
-                    <p className="text-lg text-white italic">
-                      {question ||
-                        (hasMounted
-                          ? isSpeechSupported
-                            ? "Start by pressing the microphone button..."
-                            : "Speech Recognition not available."
-                          : "")}
-                    </p>
+                  <div className="min-h-[3rem] max-h-[200px] overflow-y-auto">
+                    {isListening ? (
+                      <p className="text-lg text-white italic">
+                        {liveTranscript || (
+                          <span className="text-gray-400">Listening... speak your question...</span>
+                        )}
+                      </p>
+                    ) : (
+                      <p className="text-lg text-white italic">
+                        {question ||
+                          (hasMounted
+                            ? isSpeechSupported
+                              ? "Click the microphone button to start speaking..."
+                              : "Speech Recognition not available."
+                            : "")}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

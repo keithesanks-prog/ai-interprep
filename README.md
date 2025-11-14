@@ -151,6 +151,27 @@ This application helps candidates prepare for technical interviews by:
    
    Navigate to [http://localhost:3000](http://localhost:3000)
 
+### Desktop Assistant (Electron)
+
+For a desktop experience with continuous listening:
+
+1. Install dev dependencies:
+   ```bash
+   npm install --save-dev electron electron-builder concurrently cross-env wait-on ts-node
+   ```
+2. Start the desktop app during development (runs Next.js and Electron together):
+   ```bash
+   npm run dev:electron
+   ```
+3. Use `Ctrl+Shift+L` (or `Cmd+Shift+L` on macOS) to toggle the continuous listener when running the Electron app. The "Continuous Listener" card in the UI also provides a start/stop toggle.
+4. To package the desktop app:
+   ```bash
+   npm run electron:package
+   ```
+   Configure `electron-builder` targets in `package.json` if you need specific OS binaries.
+
+The Electron build reuses the existing Next.js UI and enables a background listener that feeds transcripts back into the app automatically.
+
 ## 📖 Usage Guide
 
 ### Creating a Company Profile
@@ -243,6 +264,59 @@ ai-eng-app/
 
 ## 🔌 API Endpoints
 
+### System Diagram
+
+```mermaid
+flowchart TD
+    subgraph Browser / Client [`app/page.tsx`]
+        MicButton["Mic Button (Start/Stop Listening)"]
+        SpeechRec["Web Speech API<br/>(SpeechRecognition)"]
+        Transcript["Live Transcript State<br/>(`liveTranscript`, `isListening`)"]
+        UI["React UI Rendering<br/>(status, scrolling text, Q&A)"]
+    end
+
+    subgraph Next.js Routes [`app/api/*`]
+        GenerateAPI["POST /api/generate"]
+        ClearAPI["POST /api/clear-responses"]
+        TTSAPI["POST /api/tts"]
+    end
+
+    subgraph Storage & Context
+        Profiles["LocalStorage Profiles<br/>(company/job/Q&A)"]
+        Timer["Response Timer & Metadata"]
+        TranscriptStore["Conversation Transcript<br/>(React state)"]
+    end
+
+    subgraph Gemini Services
+        GeminiText["Gemini Text Generation"]
+        GeminiTTS["Gemini Text-to-Speech"]
+    end
+
+    MicButton -->|toggle| SpeechRec
+    SpeechRec -->|updates| Transcript
+    Transcript -->|renders| UI
+    UI -->|fetch| GenerateAPI
+    Profiles -->|context| GenerateAPI
+    GenerateAPI -->|RAG lookup| Storage
+    Storage -->|returns past answers| GenerateAPI
+    GenerateAPI -->|Gemini API call| GeminiText
+    GenerateAPI -->|response| UI
+    UI -->|optional audio request| TTSAPI --> GeminiTTS
+    UI -->|store events| TranscriptStore
+    UI -->|manage sessions| Timer
+    UI -->|clear stored answers| ClearAPI --> Storage
+
+    classDef client fill:#0f766e,color:#fff,stroke:#0f4c5c
+    classDef api fill:#2563eb,color:#fff,stroke:#1d4ed8
+    classDef store fill:#7c3aed,color:#fff,stroke:#5b21b6
+    classDef gemini fill:#f97316,color:#fff,stroke:#ea580c
+
+    class MicButton,SpeechRec,Transcript,UI client
+    class GenerateAPI,ClearAPI,TTSAPI api
+    class Profiles,Timer,TranscriptStore store
+    class GeminiText,GeminiTTS gemini
+```
+
 ### POST `/api/generate`
 Generates AI responses using RAG and Gemini.
 
@@ -315,6 +389,48 @@ Clears stored responses for a specific profile and/or round.
 ### GET `/api/clear-responses?profileId=...&interviewRound=...`
 Gets the count of stored responses (filtered by profile and/or round).
 
+### POST `/api/generate-image`
+Generates a character concept image using Google's Gemini models.
+
+**Request Body:**
+```json
+{
+  "prompt": "Full-body turnaround of a heroic airship pilot in dieselpunk attire",
+  "draftMode": true,
+  "style": "cartoon",
+  "aspectRatio": "1:1",
+  "negativePrompt": "No text, avoid heavy shadows",
+  "characteristics": {
+    "height": "Tall, heroic proportions",
+    "physique": "Athletic, confident stance",
+    "clothing": "Dieselpunk flight suit with brass accents"
+  },
+  "characterId": "nova-ashe"
+}
+```
+
+**Behaviour:**
+- When `draftMode` is `true`, the endpoint uses the faster model specified by `GEMINI_DRAFT_IMAGE_MODEL` (defaults to `gemini-1.5-flash`) to provide quick concept drafts.
+- When `draftMode` is `false` or omitted, the higher-quality model referenced by `GEMINI_IMAGE_MODEL` (defaults to `imagen-3.0-pro`) is used for final renders.
+- `style` accepts `cartoon`, `3d-soft`, `cel-shaded`, `anime`, `hyper-realistic`, or `custom` (default).
+- `characteristics` is optional; supplied fields are folded into the design brief.
+
+**Response:**
+```json
+{
+  "provider": "gemini",
+  "draftMode": true,
+  "model": "gemini-1.5-flash",
+  "characterId": "nova-ashe",
+  "style": "cartoon",
+  "image": {
+    "base64Data": "<base64 image>",
+    "mimeType": "image/png",
+    "safetyRatings": []
+  }
+}
+```
+
 ## 📝 Adding Content
 
 ### Adding New Experiences
@@ -372,6 +488,16 @@ python ingest_technical_qa.py
 ```
 
 2. The framework will be automatically available for procedural questions
+
+### General Knowledge Base (Optional)
+
+To preload common technical notes (e.g., TLS versions, Azure networking, HTTP status codes), edit `general_kb.json` and run:
+
+```bash
+python ingest_general_kb.py
+```
+
+This stores the content in the local ChromaDB collection `general_kb` for fast RAG lookups.
 
 ## 🔧 Configuration
 
